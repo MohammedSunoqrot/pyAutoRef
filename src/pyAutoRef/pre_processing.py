@@ -1,4 +1,6 @@
-from pyAutoRef.utils import generate_random_temp_folder, read_sitk_image, perform_n4_bias_field_correction, rescale_image, resize_image, write_slices_to_disk
+import SimpleITK as sitk
+
+from pyAutoRef.utils import generate_random_temp_folder, read_sitk_image, read_dicom_folder, perform_n4_bias_field_correction, rescale_image, resize_image, write_slices_to_disk
 
 
 def pre_processing(base_path, input_image_path,
@@ -25,7 +27,18 @@ def pre_processing(base_path, input_image_path,
     temp_images_dir = generate_random_temp_folder(base_path)
 
     # Read input image
-    origial_image = read_sitk_image(input_image_path)
+    # Check if the input path corresponds to a DICOM directory.
+    # If it is DICOM directory then "read_dicom_folder" function will be used.
+    # Otherwise "read_sitk_image" function will be used.
+    reader = sitk.ImageSeriesReader()
+    series_ids = reader.GetGDCMSeriesIDs(input_image_path)
+
+    if len(series_ids) > 0:
+        # Input path contains DICOM data, use process_dicom function
+        origial_image = read_dicom_folder(input_image_path)
+    else:
+        # Input path is another image format, use read_sitk_image function
+        origial_image = read_sitk_image(input_image_path)
 
     # Apply ITK N4 bias field correction
     corrected_image = perform_n4_bias_field_correction(origial_image)

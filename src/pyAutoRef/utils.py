@@ -64,6 +64,30 @@ def read_sitk_image(file_path):
     return image
 
 
+def read_dicom_folder(folder_path):
+    """
+    Reads a DICOM foler and returns a SimpleITK image object.
+
+    Parameters:
+        folder_path (str): The path to the DICOM folder.
+
+    Returns:
+        SimpleITK.Image: The SimpleITK image object representing the image.
+    """
+    # Read DICOM series using SimpleITK
+    reader = sitk.ImageSeriesReader()
+    dicom_names = reader.GetGDCMSeriesFileNames(folder_path)
+    reader.SetFileNames(dicom_names)
+    image = reader.Execute()
+
+    # Check if the image is not of floating-point type
+    if image.GetPixelID() not in (sitk.sitkFloat32, sitk.sitkFloat64):
+        # Convert image to Float32 pixel type
+        image = sitk.Cast(image, sitk.sitkFloat32)
+
+    return image
+
+
 def save_image(image, output_file_path):
     """
     Saves the given SimpleITK image object to a file (with supported SimpleITK format) .
