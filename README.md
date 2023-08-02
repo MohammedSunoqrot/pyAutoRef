@@ -14,7 +14,7 @@ The provided algorithm was developed for research use and was NOT meant to be us
 
 # Structure
 ```
-packaging_tutorial/
+pyAutoRef/
 ├── LICENSE
 ├── pyproject.toml
 ├── README.md
