@@ -1,0 +1,17 @@
+LICENSE
+README.md
+pyproject.toml
+setup.cfg
+src/pyAutoRef/__init__.py
+src/pyAutoRef/autoref.py
+src/pyAutoRef/model.onnx
+src/pyAutoRef/normalization.py
+src/pyAutoRef/object_detection.py
+src/pyAutoRef/post_processing.py
+src/pyAutoRef/pre_processing.py
+src/pyAutoRef/utils.py
+src/pyAutoRef.egg-info/PKG-INFO
+src/pyAutoRef.egg-info/SOURCES.txt
+src/pyAutoRef.egg-info/dependency_links.txt
+src/pyAutoRef.egg-info/requires.txt
+src/pyAutoRef.egg-info/top_level.txt

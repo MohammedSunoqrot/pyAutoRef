@@ -1,0 +1,6 @@
+numpy
+SimpleITK
+Pillow
+scikit-image
+onnxruntime
+matplotlib>=3.0.0
