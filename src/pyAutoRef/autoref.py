@@ -7,6 +7,7 @@ from pyAutoRef.pre_processing import pre_processing
 from pyAutoRef.object_detection import object_detection
 from pyAutoRef.post_processing import post_process_predictions
 from pyAutoRef.normalization import normalize_image
+from pyAutoRef.utils import suppress_warnings, save_image
 
 """
 This is the python version of the:
@@ -21,14 +22,14 @@ LICENSE = 'MIT'
 GitHub: https://github.com/MohammedSunoqrot/pyAutoRef
 """
 
-
+@suppress_warnings
 def autoref(input_image_path, output_image_path=None):
     """
     autoref function for the AutoRef pipeline. This function takes the input image, performs
     pre-processing, object detection, post-processing, and normalization steps.
 
     Parameters:
-        input_image_path (str): The file path to the input 3D image (any supported SimpleITK format).
+        input_image_path (str): The file path to the input 3D image (any supported SimpleITK format) or to the DICOM folder.
         output_image_path (str, optional): The file path to save the normalized output image to any supported SimpleITK format.
                                            If None, the image will not be saved.
 
@@ -43,7 +44,7 @@ def autoref(input_image_path, output_image_path=None):
     start_time = time.time()
 
     # Print that the method started processing
-    print("=> Started AutoRef (fat, muscle) normalizing -> " + input_image_path)
+    print("=> Started AutoRef (fat, muscle) normalizing: " + input_image_path)
 
     # Get the current script file path
     current_file_path = os.path.abspath(__file__)
@@ -52,7 +53,7 @@ def autoref(input_image_path, output_image_path=None):
     current_folder_path = os.path.dirname(current_file_path)
 
     # Perform pre-processing on the input image
-    temp_images_dir, corrected_image, resized_corrected_image = pre_processing(
+    is_dicom, temp_images_dir, corrected_image, resized_corrected_image = pre_processing(
         current_folder_path, input_image_path)
 
     # Perform object detection on the preprocessed image
@@ -65,7 +66,11 @@ def autoref(input_image_path, output_image_path=None):
 
     # Perform normalization
     normalized_image = normalize_image(processed_images_intensities, corrected_image, fat_reference_value=121,
-                                       muscle_reference_value=40, output_image_path=output_image_path)
+                                       muscle_reference_value=40)
+
+    # Write the normalized image to the output path if provided
+    if output_image_path:
+        save_image(normalized_image, input_image_path, is_dicom, output_image_path)
 
     # Delete the temp folder
     shutil.rmtree(temp_images_dir)
@@ -73,7 +78,7 @@ def autoref(input_image_path, output_image_path=None):
     # Measure the time taken for processing
     end_time = time.time()
     processing_time = end_time - start_time
-    print("==> Done with AutoRef (fat, muscle) normalizing -> " + input_image_path)
+    print("==> Done with AutoRef (fat, muscle) normalizing. Output saved in: " + output_image_path)
     print("     -> Time taken for AutoRef (fat, muscle) normalizing: {:.2f} seconds".format(
         processing_time))
 

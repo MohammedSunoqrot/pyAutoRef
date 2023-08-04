@@ -1,6 +1,4 @@
-import SimpleITK as sitk
-
-from pyAutoRef.utils import generate_random_temp_folder, read_sitk_image, read_dicom_folder, perform_n4_bias_field_correction, rescale_image, resize_image, write_slices_to_disk
+from pyAutoRef.utils import generate_random_temp_folder, read_sitk_image, perform_n4_bias_field_correction, rescale_image, resize_image, write_slices_to_disk
 
 
 def pre_processing(base_path, input_image_path,
@@ -11,13 +9,14 @@ def pre_processing(base_path, input_image_path,
 
     Parameters:
         base_path (str): The path to the main folder.
-        input_image_path (str): The path to the input image file.
+        input_image_path (str): The path to the input image file/folder.
         scaling_method (str): The chosen scaling method ('none', 'max', 'median', or 'percentile'). Default is 'percentile'.
         scaling_method_args (list or tuple, optional): Additional arguments for the scaling method. Default is [99, 100/99].
         new_size (tuple, optional): The new size of the image in (rows, cols). Default is (384, 384).
         new_spacing (tuple, optional): The new pixel spacing in (rows, cols) in mm. Default is (0.5, 0.5).
 
     Returns:
+        is_dicom (bool): Is the input a DICOM folder. 
         temp_dir_path (str): The generated temp folder path.
         corrected_image (SimpleITK.Image): The N4 bias field corrected image.
         resized_corrected_image (SimpleITK.Image): The N4 bias field corrected image after
@@ -27,18 +26,7 @@ def pre_processing(base_path, input_image_path,
     temp_images_dir = generate_random_temp_folder(base_path)
 
     # Read input image
-    # Check if the input path corresponds to a DICOM directory.
-    # If it is DICOM directory then "read_dicom_folder" function will be used.
-    # Otherwise "read_sitk_image" function will be used.
-    reader = sitk.ImageSeriesReader()
-    series_ids = reader.GetGDCMSeriesIDs(input_image_path)
-
-    if len(series_ids) > 0:
-        # Input path contains DICOM data, use process_dicom function
-        origial_image = read_dicom_folder(input_image_path)
-    else:
-        # Input path is another image format, use read_sitk_image function
-        origial_image = read_sitk_image(input_image_path)
+    origial_image, is_dicom = read_sitk_image(input_image_path)
 
     # Apply ITK N4 bias field correction
     corrected_image = perform_n4_bias_field_correction(origial_image)
@@ -60,4 +48,4 @@ def pre_processing(base_path, input_image_path,
 
     # Return the temporary images folder path, the original size N4 bias field corrected image,
     # and the resized corrected image
-    return temp_images_dir, corrected_image, resized_corrected_image
+    return is_dicom, temp_images_dir, corrected_image, resized_corrected_image

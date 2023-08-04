@@ -1,12 +1,17 @@
 import os
 import numpy as np
 import SimpleITK as sitk
+import pydicom
 import uuid
 import multiprocessing
 import onnxruntime as ort
 import matplotlib.pyplot as plt
 import matplotlib.patches as patches
+import warnings
+import logging
 
+from pydicom.uid import generate_uid
+from functools import wraps
 from skimage import measure
 from PIL import Image
 
@@ -48,55 +53,173 @@ def read_sitk_image(file_path):
     Reads an image file (with supported SimpleITK format) and returns a SimpleITK image object.
 
     Parameters:
-        file_path (str): The path to the file.
+        file_path (str): The path to the file/folder(for DICOM).
 
     Returns:
-        SimpleITK.Image: The SimpleITK image object representing the image.
+        image (SimpleITK.Image): The SimpleITK image object representing the image.
+        is_dicom (bool): Is the input a DICOM folder. 
     """
-    # Read the image
-    image = sitk.ReadImage(file_path)
+
+    # Check if the input path corresponds to a DICOM directory.
+    # Check if the output_file_path has no file extension
+    if not os.path.splitext(file_path)[1]:  
+        reader = sitk.ImageSeriesReader()
+        series_ids = reader.GetGDCMSeriesIDs(file_path)
+
+        if len(series_ids) > 0:
+            # It is DICOM directory
+            # Get the DICOM files and then read them as a 3D image
+            dicom_names = reader.GetGDCMSeriesFileNames(file_path)
+            reader.SetFileNames(dicom_names)
+            image = reader.Execute()
+            # Return it is DICOM
+            is_dicom = True
+        else:
+            # It is not DICOM directory
+            # Read the image
+            image = sitk.ReadImage(file_path)
+            # Return it is not DICOM
+            is_dicom = False
+    else:
+            # It is not DICOM directory
+            # Read the image
+            image = sitk.ReadImage(file_path)
+            # Return it is not DICOM
+            is_dicom = False
 
     # Check if the image is not of floating-point type
     if image.GetPixelID() not in (sitk.sitkFloat32, sitk.sitkFloat64):
         # Convert image to Float32 pixel type
         image = sitk.Cast(image, sitk.sitkFloat32)
 
-    return image
+    return image, is_dicom
 
 
-def read_dicom_folder(folder_path):
+def sitk_image_to_dicom_series(image, input_file, output_folder, is_dicom=False):
     """
-    Reads a DICOM foler and returns a SimpleITK image object.
+    Convert a SimpleITK Image to a DICOM series and save it to the specified output folder.
 
     Parameters:
-        folder_path (str): The path to the DICOM folder.
+        image (SimpleITK.Image): The input 3D  SimpleITK Image to be converted to DICOM.
+        input_file (str): The path to the file/folder(for DICOM).
+        output_folder (str): The path to the output folder where the DICOM files will be saved.
+        is_dicom (bool): If True, copy DICOM tags from the input dicom_series to the output DICOM series.
 
     Returns:
-        SimpleITK.Image: The SimpleITK image object representing the image.
+        None.
     """
-    # Read DICOM series using SimpleITK
-    reader = sitk.ImageSeriesReader()
-    dicom_names = reader.GetGDCMSeriesFileNames(folder_path)
-    reader.SetFileNames(dicom_names)
-    image = reader.Execute()
+    # If the output folder not exists make it
+    if not os.path.exists(output_folder):
+        os.makedirs(output_folder)
 
-    # Check if the image is not of floating-point type
-    if image.GetPixelID() not in (sitk.sitkFloat32, sitk.sitkFloat64):
-        # Convert image to Float32 pixel type
-        image = sitk.Cast(image, sitk.sitkFloat32)
+    # Check if the input file/folder is DICOM series 
+    if is_dicom:
+        if not os.path.isdir(input_file):
+            raise ValueError("Input file should be a folder containing DICOM files when is_dicom is True.")
+        
+        # Load meta tags from the input DICOM series
+        input_dicom_files = [os.path.join(input_file, f) for f in os.listdir(input_file) if f.lower().endswith('.dcm') or f.lower().endswith('.ima')]
+        if not input_dicom_files:
+            raise ValueError("No DICOM files found in the input folder.")
+        
+        # Read the first DICOM file to copy relevant attributes
+        original_ds = pydicom.dcmread(input_dicom_files[0], stop_before_pixels=True)
 
-    return image
+        # Create a DICOM series from the SimpleITK image
+        dicom_series = sitk.GetArrayFromImage(image)
+        num_slices = dicom_series.shape[0]
+        
+        # Save each slice in the DICOM series
+        for i in range(num_slices):
+            dicom_slice = original_ds.copy()  # Copy original attributes
+            
+            dicom_slice.SOPInstanceUID = generate_uid()
+            
+            # Set pixel data
+            pixel_array = dicom_series[i].astype('uint16')
+            dicom_slice.PixelData = pixel_array.tobytes()
+            
+            # Set VR for Pixel Data element to 'OW'
+            dicom_slice[0x7FE0, 0x0010].VR = 'OW'
+            
+            # Set image position and slice thickness attributes
+            dicom_slice.ImagePositionPatient = f'0\\0\\{i+1}'
+            dicom_slice.SliceThickness = image.GetSpacing()[2]
+            
+            # Save DICOM file
+            output_file = os.path.join(output_folder, f"{i+1:06d}.dcm")
+            dicom_slice.save_as(output_file)
+        
+    else:
+       # Create a DICOM series from the SimpleITK image
+        dicom_series = sitk.GetArrayFromImage(image)
+       
+       # Get relevant information from the input image
+        image_spacing = image.GetSpacing()
+        image_origin = image.GetOrigin()
+
+        # Generate a single StudyInstanceUID for the entire study
+        study_uid = generate_uid()
+        # Generate a single SeriesInstanceUID for the entire series
+        series_uid = generate_uid()
+
+        sop_instance_uids = [generate_uid() for _ in range(dicom_series.shape[0])]
+
+        for i, sop_instance_uid in enumerate(sop_instance_uids):
+            dicom = pydicom.Dataset()
+            dicom.SOPInstanceUID = sop_instance_uid
+            dicom.SOPClassUID = '1.2.840.10008.5.1.4.1.1.4'  # MR Image Storage
+            dicom.StudyInstanceUID = study_uid  # Use the same StudyInstanceUID for all images
+            dicom.SeriesInstanceUID = series_uid  # Use the same SeriesInstanceUID for all images
+
+            # Set transfer syntax attributes
+            dicom.is_little_endian = True
+            dicom.is_implicit_VR = False  # Explicit VR Little Endian (default for MR Image Storage)
+
+            # Use information from the input image
+            dicom.PixelSpacing = [image_spacing[0], image_spacing[1]]
+            dicom.ImagePositionPatient = [image_origin[0], image_origin[1], i * image_spacing[2]]
+            dicom.SliceThickness = image_spacing[2]
+            dicom.BitsAllocated = 16  # Adjust this based on your image data type (e.g., 8 or 16 bits)
+
+            dicom.RescaleIntercept = 0  # Set the correct RescaleIntercept value based on your data
+            dicom.RescaleSlope = 1  # Set the correct RescaleSlope value based on your data
+
+            dicom.SeriesNumber = "100"  # Set the desired SeriesNumber
+            dicom.SeriesDescription = "AutoRef Normalized"  # Set the desired SeriesDescription
+
+            dicom.Rows, dicom.Columns = dicom_series.shape[1:]
+
+            # Adjust pixel values using rescale slope and intercept
+            pixel_array = dicom_series[i] * dicom.RescaleSlope + dicom.RescaleIntercept
+
+            dicom.PixelData = pixel_array.astype(np.int16).tobytes()
+            dicom_file = os.path.join(output_folder, f"{i+1:06d}.dcm")
+            dicom.save_as(dicom_file)
 
 
-def save_image(image, output_file_path):
+def save_image(image, input_file_path, is_dicom, output_file_path):
     """
-    Saves the given SimpleITK image object to a file (with supported SimpleITK format) .
+    Saves the given SimpleITK image object to a file with supported SimpleITK format.
+    If the output_file_path has no file extension, it performs sitk_image_to_dicom_series
+    to save the image as a DICOM series. Otherwise, it uses sitk.WriteImage to save the image.
 
     Parameters:
         image (SimpleITK.Image): The image to be saved.
+        input_file_path (str): The path to the file/folder(for DICOM).
+        is_dicom (bool): Is the input a DICOM folder. 
         output_file_path (str): The path to save the output file.
+
+    Returns:
+        None.
     """
-    sitk.WriteImage(image, output_file_path)
+    # Check if the output_file_path has no file extension
+    if not os.path.splitext(output_file_path)[1]:  
+        # Assume it is a folder path and save the image as a DICOM series
+        sitk_image_to_dicom_series(image, input_file_path, output_file_path, is_dicom)
+    else:
+        # Save the image using sitk.WriteImage
+        sitk.WriteImage(image, output_file_path)
 
 
 def perform_n4_bias_field_correction(image, num_iterations=10, convergence_threshold=0.001):
@@ -202,7 +325,7 @@ def resize_image(image, new_size=(384, 384), new_spacing=(0.5, 0.5), original_si
         original_spacing (tuple, optional): The original pixel spacing in (rows, cols) in mm.
 
     Returns:
-        SimpleITK.Image: The resized image.
+        resized_image (SimpleITK.Image): The resized image.
     """
     if original_size is None:
         original_size = image.GetSize()
@@ -252,7 +375,7 @@ def write_slices_to_disk(image_sequence, output_directory):
         output_directory (str): The directory where the slices will be saved.
 
     Returns:
-        list: A list containing the full paths of all the written image slices.
+        None.
     """
     num_slices = image_sequence.GetSize()[2]
 
@@ -584,8 +707,8 @@ def plot_images_with_bboxes(image_folder, top_predictions, output_folder):
             plt.savefig(output_path, bbox_inches='tight', pad_inches=0)
             plt.close()
 
-    """ 
-    # Example usage: 
+    """
+    # Example usage:
     # Plot bbox on image
     # output_folder = r"C:\Data\Postdoc\pyAutoRef\bbox-Plots"
     # plot_images_with_bboxes(input_folder, top_predictions, output_folder)
@@ -718,3 +841,50 @@ def overlay_mask_on_image(class_name, slice_number, cropped_image, largest_compo
     # Overlay the mask on the image slice and save the plot
     image_with_mask = overlay_mask_on_image(class_name, slice_number, cro
      """
+
+
+def suppress_warnings(func):
+    """
+    A decorator to suppress warning messages while executing a function.
+
+    Parameters:
+        func (function): The function to be decorated.
+
+    Returns:
+        function: A new function that suppresses warnings while executing the original function.
+
+    """
+    @wraps(func)
+    def wrapper(*args, **kwargs):
+        """
+        The wrapper function that suppresses warnings and executes the original function.
+
+        Parameters:
+            *args: Variable-length argument list.
+            **kwargs: Arbitrary keyword arguments.
+
+        Returns:
+            Any: The return value of the original function.
+
+        """
+        # Create a logger to handle the warnings
+        logger = logging.getLogger(func.__name__)
+        logger.setLevel(logging.ERROR)  # Set the level to ERROR to suppress all warnings
+
+        with warnings.catch_warnings():
+            # Redirect the warnings to the custom logger
+            warnings.simplefilter("always")
+            warnings.showwarning = lambda *args, **kwargs: logger.warning(*args, **kwargs)
+            return func(*args, **kwargs)
+    return wrapper
+
+    """
+        Example usage:
+        @suppress_warnings
+        def your_function():
+            # Your function code here
+            # ...
+
+        # Call the function, and warnings will be suppressed
+        your_function()
+    """

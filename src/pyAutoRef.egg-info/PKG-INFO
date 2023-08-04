@@ -1,6 +1,6 @@
 Metadata-Version: 2.1
 Name: pyAutoRef
-Version: 1.0.1
+Version: 1.0.2
 Summary: Python pakage to perfom AutoRef (prostate T2w MRI dual reference tissue [fat and muscle] normalization).
 Home-page: https://github.com/MohammedSunoqrot/pyAutoRef
 Author: Mohammed R. S. Sunoqrot
@@ -61,6 +61,7 @@ pip install pyAutoRef
 ```
 ## GitHub
 - Clone the GitHub repository
+  
    *From command line*
    ```
    git clone https://github.com/MohammedSunoqrot/pyAutoRef.git
@@ -83,17 +84,63 @@ Sunoqrot, M.R.S., Nketiah, G.A., Selnæs, K.M. et al. Automated reference tissue
 ```
 
 # How to use pyAutoRef
-There are two input parameters:
-1- input_image_path (str): The file path to the input 3D image (any supported SimpleITK format).
-2- output_image_path (str, optional): The file path to save the normalized output image to any supported SimpleITK format.
-            If None, the image will not be saved.
+To perform AutoRef normalization, you first need to import the `autoref` function.
+You can do it by calling `from pyAutoRef import autoref`
 
-***Example of usage:***
+## `autoref` Function 
+   - Parameters:
+        input_image_path (str): The file path to the input 3D image (any supported SimpleITK format) or to the DICOM folder.
+        output_image_path (str, optional): The file path to save the normalized output image to any supported SimpleITK format.
+                                           If None, the image will not be saved.
+
+   - Returns:
+        normalized_image (SimpleITK.Image): The normalized 3D image.
+
+## Supported input/output formats
+- DICOM Series.
+- All the medical [images formats supported by SimpleITK](https://simpleitk.readthedocs.io/en/v2.2.0/IO.html).
+- [SimpleITK.Image] (https://simpleitk.org/SimpleITK-Notebooks/01_Image_Basics.html).
+
+***DICOM Series is recognized when there is no file extension***
+
+### Examples of usage:
+
+***Example (input: medical image format, output: medical image format):***
 ```
 from pyAutoRef import autoref
 
 input_image_path = r"C:\Data\Case10_t2.nii.gz"
 output_image_path = r"C:\Data\Case10_t2_normalized.nii.gz"
+
+autoref(input_image_path, output_image_path)
+```
+
+***Example (input: medical image format, output: DICOM Series):***
+```
+from pyAutoRef import autoref
+
+input_image_path = r"C:\Data\Case10_t2.nii.gz"
+output_image_path = r"C:\Data\Case10_t2_normalized"
+
+autoref(input_image_path, output_image_path)
+```
+
+***Example (input: DICOM Series, output: medical image format):***
+```
+from pyAutoRef import autoref
+
+input_image_path = r"C:\Data\Case10_t2"
+output_image_path = r"C:\Data\Case10_t2_normalized.nii.gz"
+
+autoref(input_image_path, output_image_path)
+
+```
+***Example (input: DICOM Series, output: DICOM Series):***
+```
+from pyAutoRef import autoref
+
+input_image_path = r"C:\Data\Case10_t2"
+output_image_path = r"C:\Data\Case10_t2_normalized"
 
 autoref(input_image_path, output_image_path)
 ```
