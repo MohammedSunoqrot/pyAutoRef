@@ -23,7 +23,6 @@ GitHub: https://github.com/MohammedSunoqrot/pyAutoRef
 """
 
 
-@suppress_warnings
 def autoref(input_image_path, output_image_path=None):
     """
     autoref function for the AutoRef pipeline. This function takes the input image, performs

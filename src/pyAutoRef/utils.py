@@ -62,7 +62,7 @@ def read_sitk_image(file_path):
 
     # Check if the input path corresponds to a DICOM directory.
     # Check if the output_file_path has no file extension
-    if not os.path.splitext(file_path)[1]:  
+    if not os.path.splitext(file_path)[1]:
         reader = sitk.ImageSeriesReader()
         series_ids = reader.GetGDCMSeriesIDs(file_path)
 
@@ -81,11 +81,11 @@ def read_sitk_image(file_path):
             # Return it is not DICOM
             is_dicom = False
     else:
-            # It is not DICOM directory
-            # Read the image
-            image = sitk.ReadImage(file_path)
-            # Return it is not DICOM
-            is_dicom = False
+        # It is not DICOM directory
+        # Read the image
+        image = sitk.ReadImage(file_path)
+        # Return it is not DICOM
+        is_dicom = False
 
     # Check if the image is not of floating-point type
     if image.GetPixelID() not in (sitk.sitkFloat32, sitk.sitkFloat64):
@@ -112,48 +112,51 @@ def sitk_image_to_dicom_series(image, input_file, output_folder, is_dicom=False)
     if not os.path.exists(output_folder):
         os.makedirs(output_folder)
 
-    # Check if the input file/folder is DICOM series 
+    # Check if the input file/folder is DICOM series
     if is_dicom:
         if not os.path.isdir(input_file):
-            raise ValueError("Input file should be a folder containing DICOM files when is_dicom is True.")
-        
+            raise ValueError(
+                "Input file should be a folder containing DICOM files when is_dicom is True.")
+
         # Load meta tags from the input DICOM series
-        input_dicom_files = [os.path.join(input_file, f) for f in os.listdir(input_file) if f.lower().endswith('.dcm') or f.lower().endswith('.ima')]
+        input_dicom_files = [os.path.join(input_file, f) for f in os.listdir(
+            input_file) if f.lower().endswith('.dcm') or f.lower().endswith('.ima')]
         if not input_dicom_files:
             raise ValueError("No DICOM files found in the input folder.")
-        
+
         # Read the first DICOM file to copy relevant attributes
-        original_ds = pydicom.dcmread(input_dicom_files[0], stop_before_pixels=True)
+        original_ds = pydicom.dcmread(
+            input_dicom_files[0], stop_before_pixels=True)
 
         # Create a DICOM series from the SimpleITK image
         dicom_series = sitk.GetArrayFromImage(image)
         num_slices = dicom_series.shape[0]
-        
+
         # Save each slice in the DICOM series
         for i in range(num_slices):
             dicom_slice = original_ds.copy()  # Copy original attributes
-            
+
             dicom_slice.SOPInstanceUID = generate_uid()
-            
+
             # Set pixel data
             pixel_array = dicom_series[i].astype('uint16')
             dicom_slice.PixelData = pixel_array.tobytes()
-            
+
             # Set VR for Pixel Data element to 'OW'
             dicom_slice[0x7FE0, 0x0010].VR = 'OW'
-            
+
             # Set image position and slice thickness attributes
             dicom_slice.ImagePositionPatient = f'0\\0\\{i+1}'
             dicom_slice.SliceThickness = image.GetSpacing()[2]
-            
+
             # Save DICOM file
             output_file = os.path.join(output_folder, f"{i+1:06d}.dcm")
             dicom_slice.save_as(output_file)
-        
+
     else:
        # Create a DICOM series from the SimpleITK image
         dicom_series = sitk.GetArrayFromImage(image)
-       
+
        # Get relevant information from the input image
         image_spacing = image.GetSpacing()
         image_origin = image.GetOrigin()
@@ -163,35 +166,42 @@ def sitk_image_to_dicom_series(image, input_file, output_folder, is_dicom=False)
         # Generate a single SeriesInstanceUID for the entire series
         series_uid = generate_uid()
 
-        sop_instance_uids = [generate_uid() for _ in range(dicom_series.shape[0])]
+        sop_instance_uids = [generate_uid()
+                             for _ in range(dicom_series.shape[0])]
 
         for i, sop_instance_uid in enumerate(sop_instance_uids):
             dicom = pydicom.Dataset()
             dicom.SOPInstanceUID = sop_instance_uid
             dicom.SOPClassUID = '1.2.840.10008.5.1.4.1.1.4'  # MR Image Storage
             dicom.StudyInstanceUID = study_uid  # Use the same StudyInstanceUID for all images
-            dicom.SeriesInstanceUID = series_uid  # Use the same SeriesInstanceUID for all images
+            # Use the same SeriesInstanceUID for all images
+            dicom.SeriesInstanceUID = series_uid
 
             # Set transfer syntax attributes
             dicom.is_little_endian = True
-            dicom.is_implicit_VR = False  # Explicit VR Little Endian (default for MR Image Storage)
+            # Explicit VR Little Endian (default for MR Image Storage)
+            dicom.is_implicit_VR = False
 
             # Use information from the input image
             dicom.PixelSpacing = [image_spacing[0], image_spacing[1]]
-            dicom.ImagePositionPatient = [image_origin[0], image_origin[1], i * image_spacing[2]]
+            dicom.ImagePositionPatient = [
+                image_origin[0], image_origin[1], i * image_spacing[2]]
             dicom.SliceThickness = image_spacing[2]
-            dicom.BitsAllocated = 16  # Adjust this based on your image data type (e.g., 8 or 16 bits)
+            # Adjust this based on your image data type (e.g., 8 or 16 bits)
+            dicom.BitsAllocated = 16
 
             dicom.RescaleIntercept = 0  # Set the correct RescaleIntercept value based on your data
             dicom.RescaleSlope = 1  # Set the correct RescaleSlope value based on your data
 
             dicom.SeriesNumber = "100"  # Set the desired SeriesNumber
-            dicom.SeriesDescription = "AutoRef Normalized"  # Set the desired SeriesDescription
+            # Set the desired SeriesDescription
+            dicom.SeriesDescription = "AutoRef Normalized"
 
             dicom.Rows, dicom.Columns = dicom_series.shape[1:]
 
             # Adjust pixel values using rescale slope and intercept
-            pixel_array = dicom_series[i] * dicom.RescaleSlope + dicom.RescaleIntercept
+            pixel_array = dicom_series[i] * \
+                dicom.RescaleSlope + dicom.RescaleIntercept
 
             dicom.PixelData = pixel_array.astype(np.int16).tobytes()
             dicom_file = os.path.join(output_folder, f"{i+1:06d}.dcm")
@@ -214,9 +224,10 @@ def save_image(image, input_file_path, is_dicom, output_file_path):
         None.
     """
     # Check if the output_file_path has no file extension
-    if not os.path.splitext(output_file_path)[1]:  
+    if not os.path.splitext(output_file_path)[1]:
         # Assume it is a folder path and save the image as a DICOM series
-        sitk_image_to_dicom_series(image, input_file_path, output_file_path, is_dicom)
+        sitk_image_to_dicom_series(
+            image, input_file_path, output_file_path, is_dicom)
     else:
         # Save the image using sitk.WriteImage
         sitk.WriteImage(image, output_file_path)
@@ -869,12 +880,14 @@ def suppress_warnings(func):
         """
         # Create a logger to handle the warnings
         logger = logging.getLogger(func.__name__)
-        logger.setLevel(logging.ERROR)  # Set the level to ERROR to suppress all warnings
+        # Set the level to ERROR to suppress all warnings
+        logger.setLevel(logging.ERROR)
 
         with warnings.catch_warnings():
             # Redirect the warnings to the custom logger
             warnings.simplefilter("always")
-            warnings.showwarning = lambda *args, **kwargs: logger.warning(*args, **kwargs)
+            warnings.showwarning = lambda *args, **kwargs: logger.warning(
+                *args, **kwargs)
             return func(*args, **kwargs)
     return wrapper
 
