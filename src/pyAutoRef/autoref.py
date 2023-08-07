@@ -22,6 +22,7 @@ LICENSE = 'MIT'
 GitHub: https://github.com/MohammedSunoqrot/pyAutoRef
 """
 
+
 @suppress_warnings
 def autoref(input_image_path, output_image_path=None):
     """
@@ -44,7 +45,8 @@ def autoref(input_image_path, output_image_path=None):
     start_time = time.time()
 
     # Print that the method started processing
-    print("=> Started AutoRef (fat, muscle) normalizing: " + input_image_path)
+    print(
+        f"=> Started AutoRef (fat and muscle) normalizing: {input_image_path}")
 
     # Get the current script file path
     current_file_path = os.path.abspath(__file__)
@@ -70,7 +72,8 @@ def autoref(input_image_path, output_image_path=None):
 
     # Write the normalized image to the output path if provided
     if output_image_path:
-        save_image(normalized_image, input_image_path, is_dicom, output_image_path)
+        save_image(normalized_image, input_image_path,
+                   is_dicom, output_image_path)
 
     # Delete the temp folder
     shutil.rmtree(temp_images_dir)
@@ -78,9 +81,10 @@ def autoref(input_image_path, output_image_path=None):
     # Measure the time taken for processing
     end_time = time.time()
     processing_time = end_time - start_time
-    print("==> Done with AutoRef (fat, muscle) normalizing. Output saved in: " + output_image_path)
-    print("     -> Time taken for AutoRef (fat, muscle) normalizing: {:.2f} seconds".format(
+    print("==> Done with AutoRef (fat and muscle) normalizing It took: {:.2f} seconds.".format(
         processing_time))
+    if output_image_path:
+        print(f"   Output saved in: {output_image_path}")
 
     # Return the AutoRef normalized image
     return normalized_image
