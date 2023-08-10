@@ -1,3 +1,5 @@
+![PyPI](https://img.shields.io/pypi/v/pyAutoRef)
+
 # pyAutoRef
 This is the python version of the
 "Automated reference tissue normalization of T2-weighted MR images of the prostate using object recognition"
