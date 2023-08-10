@@ -73,12 +73,11 @@ You can do it by calling `from pyAutoRef import autoref`
 
 ## `autoref` Function 
    - Parameters:
-        input_image_path (str): The file path to the input 3D image (any supported SimpleITK format) or to the DICOM folder.
-        output_image_path (str, optional): The file path to save the normalized output image to any supported SimpleITK format.
-                                           If None, the image will not be saved.
+        - input_image_path (str): The file path to the input 3D image (any supported SimpleITK format) or to the DICOM folder.
+        - output_image_path (str, optional): The file path to save the normalized output image to any supported SimpleITK format. If None, the image will not be saved.
 
    - Returns:
-        normalized_image (SimpleITK.Image): The normalized 3D image.
+        - normalized_image (SimpleITK.Image): The normalized 3D image.
 
 ## Supported input/output formats
 - DICOM Series.
