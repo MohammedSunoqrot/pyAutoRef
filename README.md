@@ -96,6 +96,15 @@ You can do it by calling `from pyAutoRef import autoref`
 
 ### Examples of usage:
 
+***Example (input: medical image format, output: SiTK Image variable within the code):***
+```
+from pyAutoRef import autoref
+
+input_image_path = r"C:\Data\Case10_t2.nii.gz"
+
+normalized_image = autoref(input_image_path)
+```
+
 ***Example (input: medical image format, output: medical image format):***
 ```
 from pyAutoRef import autoref
