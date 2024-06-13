@@ -57,7 +57,15 @@ pip install pyAutoRef
 This python version is differ than the originally published MATLAB version [https://github.com/ntnu-mr-cancer/AutoRef] in terms:
 - It accepts all kind of SimpleITK supported image format.
 - It uses YOLOv8 model for object detector instead of ACF.
-   (This model is trained using the same data and bounding boxes used to train ACF in the original/MATLAB code).
+
+## Diviation from the original published, MATLAB-based method
+**`VERSION 1.0.0, 1.0.1, 1.0.2, 1.0.3, 1.0.4`**
+- YOLOv8 model for object detector trained using the same data and bounding boxes used to train ACF in the original/MATLAB code. *No Data deviation, but needed to meantioned*. 
+- The detection was performed on all slices for both fat and muscle.
+
+**`VERSION 2.0.0`**
+- YOLOv8 model for object detector trained using images from 823 cases (4 centers, 3 centers data is private and 1 is public which is the PROSTATE158 training dataset) in addition to the same data used to train the original detector. 
+- For detection for both fat and muscle the first 15% and the last 15% of slices were not looked at for detection.
 
 # How to cite AutoRef/pyAutoRef
 In case of using or refering to AutoRef/pyAutoRef, please cite it as:

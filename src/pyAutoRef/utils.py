@@ -324,7 +324,7 @@ def rescale_image(image, scaling_method, scaling_method_args=None):
         """
 
 
-def resize_image(image, new_size=(384, 384), new_spacing=(0.5, 0.5), original_size=None, original_spacing=None):
+def resize_image(image, new_size=(384, 384), new_spacing=(0.5, 0.5), original_size=None, original_spacing=None, interpolator=sitk.sitkLinear):
     """
     Resize the input image to the specified new size and spacing, or restore it to its original size.
 
@@ -334,6 +334,7 @@ def resize_image(image, new_size=(384, 384), new_spacing=(0.5, 0.5), original_si
         new_spacing (tuple, optional): The new pixel spacing in (rows, cols) in mm. Default is (0.5, 0.5).
         original_size (tuple, optional): The original size of the image in (rows, cols).
         original_spacing (tuple, optional): The original pixel spacing in (rows, cols) in mm.
+        interpolator (SimpleITK.Interpolator, optional): The interpolator used for resizing. Default is sitk.sitkLinear.
 
     Returns:
         resized_image (SimpleITK.Image): The resized image.
@@ -358,7 +359,7 @@ def resize_image(image, new_size=(384, 384), new_spacing=(0.5, 0.5), original_si
 
     # Perform the resizing and padding
     resized_image = sitk.Resample(image, new_size_rounded, sitk.Transform(
-    ), sitk.sitkLinear, image.GetOrigin(), new_spacing, image.GetDirection(), 0.0, image.GetPixelIDValue())
+    ), interpolator, image.GetOrigin(), new_spacing, image.GetDirection(), 0.0, image.GetPixelIDValue())
     resized_image = sitk.ConstantPad(resized_image, padding, padding, 0.0)
 
     return resized_image
@@ -393,8 +394,6 @@ def write_slices_to_disk(image_sequence, output_directory):
     # Create the output directory if it doesn't exist
     if not os.path.exists(output_directory):
         os.makedirs(output_directory)
-
-    # written_image_paths = []
 
     for slice_index in range(num_slices):
         # Extract the 2D slice from the 3D image sequence
@@ -440,8 +439,8 @@ def preprocess_image_for_detection(image_path, class_name=None):
         # Crop the lower 50% of the image
         image = image.crop((0, image_height // 2, image_width, image_height))
     elif class_name == "muscle":
-        # Crop the upper 50% of the image
-        image = image.crop((0, 0, image_width, image_height // 2))
+        # Crop middel part of image rows
+        image = image.crop((0, image_height // 4 , image_width, image_height * 3 // 4)) 
 
     # Resize the image to the desired input size
     image = image.resize((384, 384))
@@ -901,3 +900,23 @@ def suppress_warnings(func):
         # Call the function, and warnings will be suppressed
         your_function()
     """
+
+# Function to check predictions and identify if recalculation is needed
+def check_predictions(predictions):
+    """
+    Check if any class has zero predictions.
+
+    Args:
+        predictions (dict): Dictionary of class names and their corresponding list of predictions.
+
+    Returns:
+        str: The name of the class with zero predictions, if any.
+        None: If all classes have at least one prediction.
+    """
+    for class_name, predictions_list in predictions.items():
+        num_predictions = len(predictions_list)
+        
+        # Check if num_predictions is 0 for any class
+        if num_predictions == 0:
+            return class_name
+    return None

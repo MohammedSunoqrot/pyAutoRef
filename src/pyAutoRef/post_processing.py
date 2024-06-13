@@ -3,12 +3,12 @@ import SimpleITK as sitk
 
 from skimage import img_as_ubyte
 from skimage.filters import threshold_otsu
-from skimage.morphology import disk, opening
+from skimage.morphology import disk, opening, erosion
 
 from pyAutoRef.utils import detect_remove_outliers, extract_largest_connected_component, extract_intensities_from_mask
 
 
-def post_process_predictions(image_3D, top_predictions):
+def post_process_predictions(image_3D, top_predictions, opening_radius=5, erosion_radius=5):
     """
     Post-process the top predictions for each class by taking the area under the bounding box,
     applying Otsu thresholding, performing morphological opening,
@@ -20,6 +20,8 @@ def post_process_predictions(image_3D, top_predictions):
                                 The keys are class names, and the values are lists of dictionaries.
                                 Each dictionary contains the 'slice' number (integer),
                                 the bounding box coordinates, and the probability score.
+        opening_radius (int): The radius of the disk used for morphological opening. Default is 5.
+        erosion_radius (int): The radius of the disk used for morphological erosion. Default is 5.
 
     Returns:
         processed_images_intensities (numpy.ndarray): An array contains all the intensites
@@ -55,6 +57,11 @@ def post_process_predictions(image_3D, top_predictions):
             # Handle NaN values in the cropped image
             cropped_image = np.nan_to_num(cropped_image)
 
+            # Debug: Check if cropped_image is empty
+            if cropped_image.size == 0:
+                print(f"Empty cropped image for prediction: {prediction}.")
+                continue
+
             # Extract the area based on class (0: 'fat', 1: 'muscle')
             if class_name == 'fat':
                 binary_image = img_as_ubyte(
@@ -63,8 +70,11 @@ def post_process_predictions(image_3D, top_predictions):
                 binary_image = img_as_ubyte(
                     cropped_image < threshold_otsu(cropped_image))
 
-            # Perform morphological opening with disk shape of 1-pixel radius
-            processed_image = opening(binary_image, disk(1))
+            # Perform morphological opening with disk shape of opening_radius
+            processed_image = opening(binary_image, disk(opening_radius))
+
+            # Perform morphological erosion with disk shape of erosion_radius
+            processed_image = erosion(processed_image, disk(erosion_radius))
 
             # Extract the largest connected component from the binary image
             largest_component = extract_largest_connected_component(

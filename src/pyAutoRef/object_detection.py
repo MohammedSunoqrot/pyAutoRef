@@ -1,10 +1,9 @@
 import os
-import math
 
 from pyAutoRef.utils import detect_objects_on_image
 
 
-def object_detection(input_folder, model_path, yolo_classes=["fat", "muscle"], focus_region_slice_percent=0.75):
+def object_detection(input_folder, model_path, yolo_classes=["fat", "muscle"], slice_percent=[0.15, 0.85]):
     """
     Perform prediction on multiple images in an input folder and select the top 3 images
     with the highest prediction score for each class.
@@ -12,8 +11,8 @@ def object_detection(input_folder, model_path, yolo_classes=["fat", "muscle"], f
     Parameters:
         input_folder (str): The path to the folder containing the input images.
         model_path (str): The path to the YOLO v8 ONNX model file.
-        yolo_classes (list): The classes of the trained model.
-        focus_region_slice_percent (float): A percentage of how many sclices to detect.
+        yolo_classes (list): The classes of the trained model. Default is ["fat", "muscle"].
+        slice_percent (list): The percentage range of slices to be detected. Default is [0.15, 0.85]. Remove the first 15% and the last 15% of slices.
 
     Returns:
         top_predictions (dict): A dictionary containing the top 3 predictions for each class.
@@ -28,12 +27,18 @@ def object_detection(input_folder, model_path, yolo_classes=["fat", "muscle"], f
     image_filenames = [filename for filename in os.listdir(
         input_folder) if filename.endswith(".jpg")]
 
-    # Calculate the number of images to process.
-    num_images_to_process = math.ceil(
-        len(image_filenames) * focus_region_slice_percent)
+    # Sort the image filenames (assuming filenames are in the format '00.jpg', '01.jpg', etc.)
+    image_filenames.sort()
+
+    # Calculate the number of images
+    num_images = len(image_filenames)
+
+    # Calculate the middle part range
+    start_index = int(num_images * slice_percent[0])
+    end_index = int(num_images * slice_percent[1])
 
     # Loop through the images in the input folder and perform object detection on them.
-    for filename in image_filenames[:num_images_to_process]:
+    for filename in image_filenames[start_index:end_index]:
         image_path = os.path.join(input_folder, filename)
         result = detect_objects_on_image(image_path, model_path)
 

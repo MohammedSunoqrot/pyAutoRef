@@ -7,7 +7,7 @@ from pyAutoRef.pre_processing import pre_processing
 from pyAutoRef.object_detection import object_detection
 from pyAutoRef.post_processing import post_process_predictions
 from pyAutoRef.normalization import normalize_image
-from pyAutoRef.utils import suppress_warnings, save_image
+from pyAutoRef.utils import suppress_warnings, save_image, check_predictions
 
 """
 This is the python version of the:
@@ -60,14 +60,30 @@ def autoref(input_image_path, output_image_path=None):
     # Perform object detection on the preprocessed image
     model_path = pkg_resources.resource_filename(__name__, "model.onnx")
     top_predictions = object_detection(temp_images_dir, model_path)
+    
+    # Initial check for classes with zero predictions
+    class_with_zero_predictions = check_predictions(top_predictions)
+
+    # If any class had zero predictions, recalculate with new parameters
+    if class_with_zero_predictions:
+        print(f"No detected objects for {class_with_zero_predictions}. Recalculating predictions...")
+        
+        # Perform object detection again with new parameters
+        top_predictions = object_detection(temp_images_dir, model_path, yolo_classes=["fat", "muscle"], slice_percent=[0, 1])
+        
+        # Check again after recalculating
+        class_with_zero_predictions = check_predictions(top_predictions)
+    
+    # If still any class has zero predictions, raise an error
+    if class_with_zero_predictions:
+        raise ValueError(f"No detected objects for {class_with_zero_predictions}.")  
 
     # Perform post-processing to the detected objects
     processed_images_intensities = post_process_predictions(
         resized_corrected_image, top_predictions)
 
     # Perform normalization
-    normalized_image = normalize_image(processed_images_intensities, corrected_image, fat_reference_value=121,
-                                       muscle_reference_value=40)
+    normalized_image = normalize_image(processed_images_intensities, corrected_image)
 
     # Write the normalized image to the output path if provided
     if output_image_path:
