@@ -68,6 +68,9 @@ This python version is differ than the originally published MATLAB version [http
 **`VERSION 2.0.0`**
 - YOLOv8 model for object detector trained using images from 823 cases (4 centers, 3 centers data is private and 1 is public which is the PROSTATE158 training dataset) in addition to the same data used to train the original detector. 
 - For detection for both fat and muscle the first 15% and the last 15% of slices were not looked at for detection.
+- In detection post-processing, the kernel of opening radius of the detected object was set to 5 pixels.
+- In detection post-processing, a morphological erosion step follows the opening has been added with kernel radius of 5 pixels.
+- The 95th and 5th percentile of the fat and muscle intensities, respectively, were used to normalize the image.
 
 # How to cite AutoRef/pyAutoRef
 In case of using or refering to AutoRef/pyAutoRef, please cite it as:
