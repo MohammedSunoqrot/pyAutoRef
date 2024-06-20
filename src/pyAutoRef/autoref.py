@@ -7,7 +7,7 @@ from pyAutoRef.pre_processing import pre_processing
 from pyAutoRef.object_detection import object_detection
 from pyAutoRef.post_processing import post_process_predictions
 from pyAutoRef.normalization import normalize_image
-from pyAutoRef.utils import suppress_warnings, save_image, check_predictions
+from pyAutoRef.utils import save_image, check_predictions, check_input_image
 
 """
 This is the python version of the:
@@ -23,13 +23,13 @@ GitHub: https://github.com/MohammedSunoqrot/pyAutoRef
 """
 
 
-def autoref(input_image_path, output_image_path=None):
+def autoref(input_image, output_image_path=None):
     """
     autoref function for the AutoRef pipeline. This function takes the input image, performs
     pre-processing, object detection, post-processing, and normalization steps.
 
     Parameters:
-        input_image_path (str): The file path to the input 3D image (any supported SimpleITK format) or to the DICOM folder.
+        input_image (SimpleITK.Image, str): The input image as SimpleITK.Image OR The file path to the input 3D image (any supported SimpleITK format) or to the DICOM folder.
         output_image_path (str, optional): The file path to save the normalized output image to any supported SimpleITK format.
                                            If None, the image will not be saved.
 
@@ -43,9 +43,16 @@ def autoref(input_image_path, output_image_path=None):
     # Measure the time taken for processing
     start_time = time.time()
 
+    # Check if the input image valid
+    try:
+        input_image_type = check_input_image(input_image)
+        print(f"Input image type: {input_image_type}")
+    except ValueError as e:
+        print(e)
+
     # Print that the method started processing
     print(
-        f"=> Started AutoRef (fat and muscle) normalizing: {input_image_path}")
+        f"=> Started AutoRef (fat and muscle) normalizing: {input_image}")
 
     # Get the current script file path
     current_file_path = os.path.abspath(__file__)
@@ -55,7 +62,7 @@ def autoref(input_image_path, output_image_path=None):
 
     # Perform pre-processing on the input image
     is_dicom, temp_images_dir, corrected_image, resized_corrected_image = pre_processing(
-        current_folder_path, input_image_path)
+        current_folder_path, input_image)
 
     # Perform object detection on the preprocessed image
     model_path = pkg_resources.resource_filename(__name__, "model.onnx")
@@ -87,7 +94,7 @@ def autoref(input_image_path, output_image_path=None):
 
     # Write the normalized image to the output path if provided
     if output_image_path:
-        save_image(normalized_image, input_image_path,
+        save_image(normalized_image, input_image,
                    is_dicom, output_image_path)
 
     # Delete the temp folder

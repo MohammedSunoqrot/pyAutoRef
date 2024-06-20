@@ -1,7 +1,7 @@
-from pyAutoRef.utils import generate_random_temp_folder, read_sitk_image, perform_n4_bias_field_correction, rescale_image, resize_image, write_slices_to_disk
+from pyAutoRef.utils import generate_random_temp_folder, read_sitk_image, perform_n4_bias_field_correction, rescale_image, resize_image, write_slices_to_disk, check_input_image
 
 
-def pre_processing(base_path, input_image_path,
+def pre_processing(base_path, input_image,
                    scaling_method='percentile', scaling_method_args=[99, 100/99],
                    new_size=(384, 384), new_spacing=(0.5, 0.5)):
     """
@@ -9,7 +9,7 @@ def pre_processing(base_path, input_image_path,
 
     Parameters:
         base_path (str): The path to the main folder.
-        input_image_path (str): The path to the input image file/folder.
+        input_image (str): The input image variable/file/folder.
         scaling_method (str): The chosen scaling method ('none', 'max', 'median', or 'percentile'). Default is 'percentile'.
         scaling_method_args (list or tuple, optional): Additional arguments for the scaling method. Default is [99, 100/99].
         new_size (tuple, optional): The new size of the image in (rows, cols). Default is (384, 384).
@@ -25,8 +25,15 @@ def pre_processing(base_path, input_image_path,
     # Folder for output images
     temp_images_dir = generate_random_temp_folder(base_path)
 
-    # Read input image
-    origial_image, is_dicom = read_sitk_image(input_image_path)
+    # Check if the type of input image
+    input_image_type = check_input_image(input_image)
+
+    if input_image_type == 'Path':
+        # Read input image
+        origial_image, is_dicom = read_sitk_image(input_image)
+    else:
+        origial_image = input_image
+        is_dicom = False
 
     # Apply ITK N4 bias field correction
     corrected_image = perform_n4_bias_field_correction(origial_image)

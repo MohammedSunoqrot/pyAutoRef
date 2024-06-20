@@ -901,12 +901,11 @@ def suppress_warnings(func):
         your_function()
     """
 
-# Function to check predictions and identify if recalculation is needed
 def check_predictions(predictions):
     """
     Check if any class has zero predictions.
 
-    Args:
+    Parameters:
         predictions (dict): Dictionary of class names and their corresponding list of predictions.
 
     Returns:
@@ -920,3 +919,26 @@ def check_predictions(predictions):
         if num_predictions == 0:
             return class_name
     return None
+
+
+def check_input_image(input_image):
+    """
+    Checks the type of the input image and raises appropriate errors if the conditions are not met.
+    
+    Parameters:
+        input_image: The input to be checked. It can be None, a SimpleITK.Image, or a string representing a file path.
+    
+    Returns:
+        str: 'SimpleITK.Image' if the input is a SimpleITK.Image, or 'Path' if the input is a valid file path.
+    
+    Raises:
+        ValueError: If the input_image is None, or if the input is neither a SimpleITK.Image nor a valid file path.
+    """
+    if input_image is None:
+        raise ValueError("You need to enter an input image.")
+    elif isinstance(input_image, sitk.Image):
+        return 'SimpleITK.Image'
+    elif isinstance(input_image, str) and os.path.exists(input_image):
+        return 'Path'
+    else:
+        raise ValueError("The entered value is not a SimpleITK.Image or a valid path.")

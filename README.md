@@ -65,7 +65,7 @@ This python version is differ than the originally published MATLAB version [http
 - YOLOv8 model for object detector trained using the same data and bounding boxes used to train ACF in the original/MATLAB code. *No Data deviation, but needed to meantioned*. 
 - The detection was performed on all slices for both fat and muscle.
 
-**`VERSION 2.0.0`**
+**`VERSION 2.0.0 and above`**
 - YOLOv8 model for object detector trained using images from 823 cases (4 centers, 3 centers data is private and 1 is public which is the PROSTATE158 training dataset) in addition to the same data used to train the original detector. 
 - For detection for both fat and muscle the first 15% and the last 15% of slices were not looked at for detection.
 - In detection post-processing, the kernel of opening radius of the detected object was set to 5 pixels.
@@ -84,20 +84,44 @@ You can do it by calling `from pyAutoRef import autoref`
 
 ## `autoref` Function 
    - Parameters:
-        - input_image_path (str): The file path to the input 3D image (any supported SimpleITK format) or to the DICOM folder.
+        - input_image (SimpleITK.Image, str): The input image as SimpleITK.Image OR The file path to the input 3D image (any supported SimpleITK format) or to the DICOM folder.
         - output_image_path (str, optional): The file path to save the normalized output image to any supported SimpleITK format. If None, the image will not be saved.
 
    - Returns:
         - normalized_image (SimpleITK.Image): The normalized 3D image.
 
 ## Supported input/output formats
-- DICOM Series.
-- All the medical [images formats supported by SimpleITK](https://simpleitk.readthedocs.io/en/v2.2.0/IO.html).
+- Path to DICOM Series.
+- Path to images of all the medical [images formats supported by SimpleITK](https://simpleitk.readthedocs.io/en/v2.2.0/IO.html).
 - [SimpleITK.Image] (https://simpleitk.org/SimpleITK-Notebooks/01_Image_Basics.html).
 
 ***DICOM Series is recognized when there is no file extension***
 
 ### Examples of usage:
+
+***Example (input: SiTK Image variable within the code, output: medical image format -Path to write- ):***
+```
+import SimpleITK as sitk
+from pyAutoRef import autoref
+
+file_path = r"C:\Data\Case10_t2.nii.gz"
+
+input_image = sitk.ReadImage(file_path)
+
+output_image_path = r"C:\Data\Case10_t2_normalized.nii.gz"
+
+autoref(input_image, output_image_path)
+```
+
+***Example (input: SiTK Image variable within the code, output: SiTK Image variable within the code):***
+```
+import SimpleITK as sitk
+from pyAutoRef import autoref
+
+input_image = sitk.ReadImage(file_path)
+
+normalized_image = autoref(input_image)
+```
 
 ***Example (input: medical image format, output: SiTK Image variable within the code):***
 ```
