@@ -51,8 +51,10 @@ def autoref(input_image, output_image_path=None):
         print(e)
 
     # Print that the method started processing
-    print(
-        f"=> Started AutoRef (fat and muscle) normalizing: {input_image}")
+    if input_image_type == 'Path':
+        print(f"=> Started AutoRef (fat and muscle) normalizing: {input_image}")
+    else:
+        print(f"=> Started AutoRef (fat and muscle) normalizing...")
 
     # Get the current script file path
     current_file_path = os.path.abspath(__file__)
