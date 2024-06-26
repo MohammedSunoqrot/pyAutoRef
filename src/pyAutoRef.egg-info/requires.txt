@@ -1,7 +1,0 @@
-numpy
-SimpleITK
-Pillow
-pydicom
-scikit-image
-onnxruntime
-matplotlib>=3.0.0

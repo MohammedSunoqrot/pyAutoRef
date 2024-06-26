@@ -942,3 +942,49 @@ def check_input_image(input_image):
         return 'Path'
     else:
         raise ValueError("The entered value is not a SimpleITK.Image or a valid path.")
+
+def get_intensities_without_detection(image_3D):
+    """
+    Process the 3D image to get the intensities within the selected 3 middle slices.
+
+    Parameters:
+        image_3D (SimpleITK.Image): The 3D image containing the slices.
+
+    Returns:
+        processed_images_intensities (numpy.ndarray): An array contains all the intensites
+          within the selected 3 middle slices.
+    """
+    # Detect and remove outliers in the 3D image
+    image_3D_wo_outliers = detect_remove_outliers(image_3D)
+
+    # Get the size of the image
+    size = image_3D_wo_outliers.GetSize()
+
+    # Determine the central slices
+    central_slice_indices = [size[2] // 2 - 1, size[2] // 2, size[2] // 2 + 1]
+
+    # Initialize an empty list to store non-zero intensities
+    non_zero_intensities = []
+
+    # Loop through the central slices and extract non-zero intensities
+    for index in central_slice_indices:
+        # Extract the 2D slice
+        slice_image = image_3D_wo_outliers[:, :, index]
+        # Convert to numpy array
+        slice_array = sitk.GetArrayFromImage(slice_image)
+        # Get non-zero intensities
+        non_zero_values = slice_array[slice_array > 0]
+        # Append the non-zero values to the list
+        non_zero_intensities.extend(non_zero_values)
+
+    # Convert the list to a numpy array
+    non_zero_intensities_array = np.array(non_zero_intensities)
+
+    # Convert the list of intensities to a NumPy array and store in the dictionary
+    # Duplicate the array to have one array with 2 classes
+    processed_images_intensities = {}
+    processed_images_intensities['fat'] = np.array(non_zero_intensities_array)
+    processed_images_intensities['muscle'] = np.array(non_zero_intensities_array)
+    
+    # Return the intensities arrays of the detected classes objects
+    return processed_images_intensities

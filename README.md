@@ -72,6 +72,10 @@ This python version is differ than the originally published MATLAB version [http
 - In detection post-processing, a morphological erosion step follows the opening has been added with kernel radius of 5 pixels.
 - The 95th and 5th percentile of the fat and muscle intensities, respectively, were used to normalize the image.
 
+**`VERSION 2.1.0 and above`**
+- In case of non-detected fat or muscle objects, the 3 middel slices will be selected, and the normalization will be done using the intensity be calculated using the 95th and 5th percentile of the entire pre-prccessed 3 slices.
+
+
 # How to cite AutoRef/pyAutoRef
 In case of using or refering to AutoRef/pyAutoRef, please cite it as:
 ```

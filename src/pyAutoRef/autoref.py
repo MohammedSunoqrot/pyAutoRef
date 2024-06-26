@@ -7,7 +7,7 @@ from pyAutoRef.pre_processing import pre_processing
 from pyAutoRef.object_detection import object_detection
 from pyAutoRef.post_processing import post_process_predictions
 from pyAutoRef.normalization import normalize_image
-from pyAutoRef.utils import save_image, check_predictions, check_input_image
+from pyAutoRef.utils import save_image, check_predictions, check_input_image, get_intensities_without_detection
 
 """
 This is the python version of the:
@@ -83,12 +83,13 @@ def autoref(input_image, output_image_path=None):
         # Check again after recalculating
         class_with_zero_predictions = check_predictions(top_predictions)
     
-    # If still any class has zero predictions, raise an error
+    # If still any class has zero predictions, normalize without detection
     if class_with_zero_predictions:
-        raise ValueError(f"No detected objects for {class_with_zero_predictions}.")  
-
-    # Perform post-processing to the detected objects
-    processed_images_intensities = post_process_predictions(
+        print(f"Objects still not detected. Recalculating intensities without detection...")
+        processed_images_intensities = get_intensities_without_detection(resized_corrected_image)
+    else:
+        # Perform post-processing to the detected objects
+        processed_images_intensities = post_process_predictions(
         resized_corrected_image, top_predictions)
 
     # Perform normalization
