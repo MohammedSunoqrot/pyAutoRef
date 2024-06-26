@@ -1,0 +1,202 @@
+Metadata-Version: 2.1
+Name: pyAutoRef
+Version: 2.1.0
+Summary: Python pakage to perfom AutoRef (prostate T2w MRI dual reference tissue [fat and muscle] normalization).
+Home-page: https://github.com/MohammedSunoqrot/pyAutoRef
+Author: Mohammed R. S. Sunoqrot
+Author-email: mohammed.sunoqrot@ntnu.no
+Project-URL: Bug Tracker, https://github.com/MohammedSunoqrot/pyAutoRef/issues
+Classifier: Programming Language :: Python :: 3
+Classifier: Programming Language :: Python :: 3.8
+Classifier: Programming Language :: Python :: 3.9
+Classifier: Programming Language :: Python :: 3.10
+Classifier: License :: OSI Approved :: MIT License
+Classifier: Operating System :: OS Independent
+Requires-Python: >=3.8
+Description-Content-Type: text/markdown
+License-File: LICENSE
+Requires-Dist: numpy
+Requires-Dist: SimpleITK
+Requires-Dist: Pillow
+Requires-Dist: pydicom
+Requires-Dist: scikit-image
+Requires-Dist: onnxruntime
+Requires-Dist: matplotlib>=3.0.0
+
+![PyPI](https://img.shields.io/pypi/v/pyAutoRef)
+
+# pyAutoRef
+This is the python version of the
+"Automated reference tissue normalization of T2-weighted MR images of the prostate using object recognition"
+
+This is an automated method for dual-reference tissue (fat and muscle) normalization of T2-weighted MRI for the prostate.
+
+The method was developed at the CIMORe group at the Norwegian University of Science and Technology (NTNU) in Trondheim, Norway.
+[https://www.ntnu.edu/isb/cimore]
+
+For detailed information about this method, please read our paper: [https://link.springer.com/article/10.1007%2Fs10334-020-00871-3]
+
+# Note
+The provided algorithm was developed for research use and was NOT meant to be used in clinic.
+
+# Structure
+```
+pyAutoRef/
+├── LICENSE
+├── pyproject.toml
+├── README.md
+├── setup.cfg
+├── src/
+│   └── pyAutoRef/
+│       ├── __init__.py
+│       ├── autoref.py
+│       ├── pre_processing.py
+│       ├── object_detection.py
+│       ├── post_processing.py
+│       ├── normalization.py
+│       ├── utils.py
+│       ├── MANIFEST.in
+│       └── model.onnx
+└── tests/
+```
+
+# Installation
+You can install the package either from pip or using pip or the files in GitHub repository [https://github.com/MohammedSunoqrot/pyAutoRef]
+
+## pip
+Simply type:
+```
+pip install pyAutoRef
+```
+## GitHub
+- Clone the GitHub repository
+  
+   *From command line*
+   ```
+   git clone https://github.com/MohammedSunoqrot/pyAutoRef.git
+   ```
+- Change directory to the clones folder (unzip if needed) and type
+   ```
+   pip install . 
+   ```
+
+# Difference Note
+This python version is differ than the originally published MATLAB version [https://github.com/ntnu-mr-cancer/AutoRef] in terms:
+- It accepts all kind of SimpleITK supported image format.
+- It uses YOLOv8 model for object detector instead of ACF.
+
+## Diviation from the original published, MATLAB-based method
+**`VERSION 1.0.0, 1.0.1, 1.0.2, 1.0.3, 1.0.4`**
+- YOLOv8 model for object detector trained using the same data and bounding boxes used to train ACF in the original/MATLAB code. *No Data deviation, but needed to meantioned*. 
+- The detection was performed on all slices for both fat and muscle.
+
+**`VERSION 2.0.0 and above`**
+- YOLOv8 model for object detector trained using images from 823 cases (4 centers, 3 centers data is private and 1 is public which is the PROSTATE158 training dataset) in addition to the same data used to train the original detector. 
+- For detection for both fat and muscle the first 15% and the last 15% of slices were not looked at for detection.
+- In detection post-processing, the kernel of opening radius of the detected object was set to 5 pixels.
+- In detection post-processing, a morphological erosion step follows the opening has been added with kernel radius of 5 pixels.
+- The 95th and 5th percentile of the fat and muscle intensities, respectively, were used to normalize the image.
+
+**`VERSION 2.1.0 and above`**
+- In case of non-detected fat or muscle objects, the 3 middel slices will be selected, and the normalization will be done using the intensity be calculated using the 95th and 5th percentile of the entire pre-prccessed 3 slices.
+
+
+# How to cite AutoRef/pyAutoRef
+In case of using or refering to AutoRef/pyAutoRef, please cite it as:
+```
+Sunoqrot, M.R.S., Nketiah, G.A., Selnæs, K.M. et al. Automated reference tissue normalization of T2-weighted MR images of the prostate using object recognition. Magn Reson Mater Phy 34, 309–321 (2021). [https://doi.org/10.1007/s10334-020-00871-3]
+```
+
+# How to use pyAutoRef
+To perform AutoRef normalization, you first need to import the `autoref` function.
+You can do it by calling `from pyAutoRef import autoref`
+
+## `autoref` Function 
+   - Parameters:
+        - input_image (SimpleITK.Image, str): The input image as SimpleITK.Image OR The file path to the input 3D image (any supported SimpleITK format) or to the DICOM folder.
+        - output_image_path (str, optional): The file path to save the normalized output image to any supported SimpleITK format. If None, the image will not be saved.
+
+   - Returns:
+        - normalized_image (SimpleITK.Image): The normalized 3D image.
+
+## Supported input/output formats
+- Path to DICOM Series.
+- Path to images of all the medical [images formats supported by SimpleITK](https://simpleitk.readthedocs.io/en/v2.2.0/IO.html).
+- [SimpleITK.Image] (https://simpleitk.org/SimpleITK-Notebooks/01_Image_Basics.html).
+
+***DICOM Series is recognized when there is no file extension***
+
+### Examples of usage:
+
+***Example (input: SiTK Image variable within the code, output: medical image format -Path to write- ):***
+```
+import SimpleITK as sitk
+from pyAutoRef import autoref
+
+file_path = r"C:\Data\Case10_t2.nii.gz"
+
+input_image = sitk.ReadImage(file_path)
+
+output_image_path = r"C:\Data\Case10_t2_normalized.nii.gz"
+
+autoref(input_image, output_image_path)
+```
+
+***Example (input: SiTK Image variable within the code, output: SiTK Image variable within the code):***
+```
+import SimpleITK as sitk
+from pyAutoRef import autoref
+
+input_image = sitk.ReadImage(file_path)
+
+normalized_image = autoref(input_image)
+```
+
+***Example (input: medical image format, output: SiTK Image variable within the code):***
+```
+from pyAutoRef import autoref
+
+input_image_path = r"C:\Data\Case10_t2.nii.gz"
+
+normalized_image = autoref(input_image_path)
+```
+
+***Example (input: medical image format, output: medical image format):***
+```
+from pyAutoRef import autoref
+
+input_image_path = r"C:\Data\Case10_t2.nii.gz"
+output_image_path = r"C:\Data\Case10_t2_normalized.nii.gz"
+
+autoref(input_image_path, output_image_path)
+```
+
+***Example (input: medical image format, output: DICOM Series):***
+```
+from pyAutoRef import autoref
+
+input_image_path = r"C:\Data\Case10_t2.nii.gz"
+output_image_path = r"C:\Data\Case10_t2_normalized"
+
+autoref(input_image_path, output_image_path)
+```
+
+***Example (input: DICOM Series, output: medical image format):***
+```
+from pyAutoRef import autoref
+
+input_image_path = r"C:\Data\Case10_t2"
+output_image_path = r"C:\Data\Case10_t2_normalized.nii.gz"
+
+autoref(input_image_path, output_image_path)
+
+```
+***Example (input: DICOM Series, output: DICOM Series):***
+```
+from pyAutoRef import autoref
+
+input_image_path = r"C:\Data\Case10_t2"
+output_image_path = r"C:\Data\Case10_t2_normalized"
+
+autoref(input_image_path, output_image_path)
+```
