@@ -2,12 +2,14 @@ import os
 import time
 import shutil
 import pkg_resources
+import logging
 
 from pyAutoRef.pre_processing import pre_processing
 from pyAutoRef.object_detection import object_detection
 from pyAutoRef.post_processing import post_process_predictions
 from pyAutoRef.normalization import normalize_image
 from pyAutoRef.utils import save_image, check_predictions, check_input_image, get_intensities_without_detection
+
 
 """
 This is the python version of the:
@@ -21,6 +23,10 @@ AUTHOR_EMAIL = 'mohammed.sunoqrot@ntnu.no'
 LICENSE = 'MIT'
 GitHub: https://github.com/MohammedSunoqrot/pyAutoRef
 """
+
+# Set up logging
+logging.basicConfig(level=logging.INFO,
+                    format='%(asctime)s - %(levelname)s - %(message)s')
 
 
 def autoref(input_image, output_image_path=None):
@@ -38,7 +44,6 @@ def autoref(input_image, output_image_path=None):
 
     Note:
         The normalized 3D image is saved to the specified output_image_path if provided.
-
     """
     # Measure the time taken for processing
     start_time = time.time()
@@ -46,15 +51,17 @@ def autoref(input_image, output_image_path=None):
     # Check if the input image valid
     try:
         input_image_type = check_input_image(input_image)
-        print(f"Input image type: {input_image_type}")
+        logging.info(f"Input image type: {input_image_type}")
     except ValueError as e:
-        print(e)
+        logging.error(f"Invalid input image: {e}")
+        return None
 
     # Print that the method started processing
     if input_image_type == 'Path':
-        print(f"=> Started AutoRef (fat and muscle) normalizing: {input_image}")
+        logging.info(
+            f"=> Started AutoRef (fat and muscle) normalizing: {input_image}")
     else:
-        print(f"=> Started AutoRef (fat and muscle) normalizing...")
+        logging.info(f"=> Started AutoRef (fat and muscle) normalizing...")
 
     # Get the current script file path
     current_file_path = os.path.abspath(__file__)
@@ -69,36 +76,40 @@ def autoref(input_image, output_image_path=None):
     # Perform object detection on the preprocessed image
     model_path = pkg_resources.resource_filename(__name__, "model.onnx")
     top_predictions = object_detection(temp_images_dir, model_path)
-    
+
     # Initial check for classes with zero predictions
     class_with_zero_predictions = check_predictions(top_predictions)
 
     # If any class had zero predictions, recalculate with new parameters
     if class_with_zero_predictions:
-        print(f"No detected objects for {class_with_zero_predictions}. Recalculating predictions...")
-        
+        logging.info(
+            f"No detected objects for {class_with_zero_predictions}. Recalculating predictions...")
+
         # Perform object detection again with new parameters
-        top_predictions = object_detection(temp_images_dir, model_path, yolo_classes=["fat", "muscle"], slice_percent=[0, 1])
-        
+        top_predictions = object_detection(temp_images_dir, model_path, yolo_classes=[
+                                           "fat", "muscle"], slice_percent=[0, 1])
+
         # Check again after recalculating
         class_with_zero_predictions = check_predictions(top_predictions)
-    
+
     # If still any class has zero predictions, normalize without detection
     if class_with_zero_predictions:
-        print(f"Objects still not detected. Recalculating intensities without detection...")
-        processed_images_intensities = get_intensities_without_detection(resized_corrected_image)
+        logging.info(
+            "Objects still not detected. Recalculating intensities without detection...")
+        processed_images_intensities = get_intensities_without_detection(
+            resized_corrected_image)
     else:
         # Perform post-processing to the detected objects
         processed_images_intensities = post_process_predictions(
-        resized_corrected_image, top_predictions)
+            resized_corrected_image, top_predictions)
 
     # Perform normalization
-    normalized_image = normalize_image(processed_images_intensities, corrected_image)
+    normalized_image = normalize_image(
+        processed_images_intensities, corrected_image)
 
     # Write the normalized image to the output path if provided
     if output_image_path:
-        save_image(normalized_image, input_image,
-                   is_dicom, output_image_path)
+        save_image(normalized_image, input_image, is_dicom, output_image_path)
 
     # Delete the temp folder
     shutil.rmtree(temp_images_dir)
@@ -106,10 +117,10 @@ def autoref(input_image, output_image_path=None):
     # Measure the time taken for processing
     end_time = time.time()
     processing_time = end_time - start_time
-    print("==> Done with AutoRef (fat and muscle) normalizing It took: {:.2f} seconds.".format(
+    logging.info("==> Done with AutoRef (fat and muscle) normalizing. It took: {:.2f} seconds.".format(
         processing_time))
     if output_image_path:
-        print(f"   Output saved in: {output_image_path}")
+        logging.info(f"   Output saved in: {output_image_path}")
 
     # Return the AutoRef normalized image
     return normalized_image

@@ -5,7 +5,7 @@ def pre_processing(base_path, input_image,
                    scaling_method='percentile', scaling_method_args=[99, 100/99],
                    new_size=(384, 384), new_spacing=(0.5, 0.5)):
     """
-   Pre-process the input image to prepare it to be used later.
+    Pre-process the input image to prepare it for further processing.
 
     Parameters:
         base_path (str): The path to the main folder.
@@ -16,40 +16,41 @@ def pre_processing(base_path, input_image,
         new_spacing (tuple, optional): The new pixel spacing in (rows, cols) in mm. Default is (0.5, 0.5).
 
     Returns:
-        is_dicom (bool): Is the input a DICOM folder. 
-        temp_dir_path (str): The generated temp folder path.
+        is_dicom (bool): Is the input a DICOM folder.
+        temp_dir_path (str): The generated temporary folder path.
         corrected_image (SimpleITK.Image): The N4 bias field corrected image.
-        resized_corrected_image (SimpleITK.Image): The N4 bias field corrected image after
-          resized to new grid: 384 x 384 pixels of 0.5 x 0.5 mm.
+        resized_corrected_image (SimpleITK.Image): The N4 bias field corrected image resized to new grid: 384 x 384 pixels of 0.5 x 0.5 mm.
     """
-    # Folder for output images
+    # Generate a temporary folder for output images
     temp_images_dir = generate_random_temp_folder(base_path)
 
-    # Check if the type of input image
+    # Check if the input image is a path or already an image object
     input_image_type = check_input_image(input_image)
 
     if input_image_type == 'Path':
-        # Read input image
-        origial_image, is_dicom = read_sitk_image(input_image)
+        try:
+            # Read the input image
+            original_image, is_dicom = read_sitk_image(input_image)
+        except Exception as e:
+            raise RuntimeError(f"Error reading input image: {e}")
     else:
-        origial_image = input_image
+        original_image = input_image
         is_dicom = False
 
     # Apply ITK N4 bias field correction
-    corrected_image = perform_n4_bias_field_correction(origial_image)
+    corrected_image = perform_n4_bias_field_correction(original_image)
 
-    # Rescale the corrected image: to the 99th percentile intensity value
+    # Rescale the corrected image to the 99th percentile intensity value
     rescaled_image = rescale_image(
         corrected_image, scaling_method, scaling_method_args)
 
-    # Resize fixed image to new grid: 384 x 384 pixels of 0.5 x 0.5 mm
-    resized_image = resize_image(
-        rescaled_image, new_size, new_spacing)
+    # Resize the image to new grid: 384 x 384 pixels of 0.5 x 0.5 mm
+    resized_image = resize_image(rescaled_image, new_size, new_spacing)
 
-    # Write all the slices from the 'resized_image' to disk in the output directory
+    # Write all the slices from the resized image to disk in the output directory
     write_slices_to_disk(resized_image, temp_images_dir)
 
-    # Resize the corrected image to return to be used later
+    # Resize the corrected image for later use
     resized_corrected_image = resize_image(
         corrected_image, new_size, new_spacing)
 

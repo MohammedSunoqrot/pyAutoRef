@@ -1,6 +1,6 @@
 Metadata-Version: 2.1
 Name: pyAutoRef
-Version: 2.1.0
+Version: 2.2.1
 Summary: Python pakage to perfom AutoRef (prostate T2w MRI dual reference tissue [fat and muscle] normalization).
 Home-page: https://github.com/MohammedSunoqrot/pyAutoRef
 Author: Mohammed R. S. Sunoqrot

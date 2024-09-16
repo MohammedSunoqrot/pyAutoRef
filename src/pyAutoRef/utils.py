@@ -15,6 +15,10 @@ from functools import wraps
 from skimage import measure
 from PIL import Image
 
+# Configure logging
+logging.basicConfig(level=logging.INFO,
+                    format='%(asctime)s - %(levelname)s - %(message)s')
+
 
 def generate_random_temp_folder(base_path):
     """
@@ -33,14 +37,17 @@ def generate_random_temp_folder(base_path):
     try:
         # Create the temporary directory
         os.makedirs(temp_dir_path)
+        logging.info(f"Created temporary directory: {temp_dir_path}")
     except FileExistsError:
         # If the directory already exists (unlikely due to the unique name),
         # retry with a different name
+        logging.warning(
+            f"Directory already exists: {temp_dir_path}. Retrying...")
         return generate_random_temp_folder(base_path)
 
     return temp_dir_path
 
-    """ 
+    """
     # Example usage:
     base_path = "/path/to/your/base/directory"
     temp_folder = generate_random_temp_folder(base_path)
@@ -57,39 +64,34 @@ def read_sitk_image(file_path):
 
     Returns:
         image (SimpleITK.Image): The SimpleITK image object representing the image.
-        is_dicom (bool): Is the input a DICOM folder. 
+        is_dicom (bool): Is the input a DICOM folder.
     """
 
     # Check if the input path corresponds to a DICOM directory.
     # Check if the output_file_path has no file extension
     if not os.path.splitext(file_path)[1]:
+        # No file extension, assuming it is a directory
         reader = sitk.ImageSeriesReader()
         series_ids = reader.GetGDCMSeriesIDs(file_path)
 
-        if len(series_ids) > 0:
-            # It is DICOM directory
-            # Get the DICOM files and then read them as a 3D image
+        if series_ids:
+            # It is a DICOM directory
             dicom_names = reader.GetGDCMSeriesFileNames(file_path)
             reader.SetFileNames(dicom_names)
             image = reader.Execute()
-            # Return it is DICOM
             is_dicom = True
         else:
-            # It is not DICOM directory
-            # Read the image
+            # It is not a DICOM directory, read as a regular image
             image = sitk.ReadImage(file_path)
-            # Return it is not DICOM
             is_dicom = False
     else:
-        # It is not DICOM directory
-        # Read the image
+        # It is a file, not a DICOM directory
         image = sitk.ReadImage(file_path)
-        # Return it is not DICOM
         is_dicom = False
 
-    # Check if the image is not of floating-point type
+    # Ensure the image is of floating-point type
     if image.GetPixelID() not in (sitk.sitkFloat32, sitk.sitkFloat64):
-        # Convert image to Float32 pixel type
+        # Convert image to Float32 pixel type for consistency
         image = sitk.Cast(image, sitk.sitkFloat32)
 
     return image, is_dicom
@@ -217,19 +219,22 @@ def save_image(image, input_file_path, is_dicom, output_file_path):
     Parameters:
         image (SimpleITK.Image): The image to be saved.
         input_file_path (str): The path to the file/folder(for DICOM).
-        is_dicom (bool): Is the input a DICOM folder. 
+        is_dicom (bool): Is the input a DICOM folder.
         output_file_path (str): The path to save the output file.
 
     Returns:
         None.
     """
-    # Check if the output_file_path has no file extension
-    if not os.path.splitext(output_file_path)[1]:
-        # Assume it is a folder path and save the image as a DICOM series
+    # Determine the file extension of the output file path
+    _, file_extension = os.path.splitext(output_file_path)
+
+    if not file_extension:
+        # No file extension, assume it is a folder path for DICOM series
+        # Save the image as a DICOM series
         sitk_image_to_dicom_series(
             image, input_file_path, output_file_path, is_dicom)
     else:
-        # Save the image using sitk.WriteImage
+        # File extension present, use sitk.WriteImage for saving
         sitk.WriteImage(image, output_file_path)
 
 
@@ -277,30 +282,49 @@ def rescale_image(image, scaling_method, scaling_method_args=None):
         scaling_method_args (list or tuple, optional): Additional arguments for the scaling method.
 
     Returns:
-        image (SimpleITK.Image): The rescaled image.
+        rescaled_image (SimpleITK.Image): The rescaled image.
     """
+    # Convert SimpleITK image to NumPy array for efficient processing
+    image_np = sitk.GetArrayFromImage(image)
+
     if scaling_method == 'none':
-        # No scaling is applied.
+        # No scaling is applied, return the original image
         return image
 
+    scaleFactor = scaling_method_args[0] if scaling_method_args else 1.0
+
     if scaling_method == 'max':
-        # Scaling by the maximum value multiplied by scaleFactor.
-        scaleFactor = scaling_method_args[0]
-        return image / (np.max(image) * scaleFactor)
-
-    if scaling_method == 'median':
-        # Scaling by the median value multiplied by scaleFactor.
-        scaleFactor = scaling_method_args[0]
-        return image / (np.median(image) * scaleFactor)
-
-    if scaling_method == 'percentile':
-        # Scaling by the given percentile multiplied by scaleFactor.
+        # Scaling by the maximum value in the image multiplied by scaleFactor
+        max_value = np.max(image_np)
+        if max_value != 0:
+            rescaled_image_np = image_np / (max_value * scaleFactor)
+        else:
+            rescaled_image_np = image_np
+    elif scaling_method == 'median':
+        # Scaling by the median value in the image multiplied by scaleFactor
+        median_value = np.median(image_np)
+        if median_value != 0:
+            rescaled_image_np = image_np / (median_value * scaleFactor)
+        else:
+            rescaled_image_np = image_np
+    elif scaling_method == 'percentile':
+        # Scaling by a specified percentile of the image values multiplied by scaleFactor
         prct = scaling_method_args[0]
         scaleFactor = scaling_method_args[1]
-        return image / (np.percentile(image, prct) * scaleFactor)
+        percentile_value = np.percentile(image_np, prct)
+        if percentile_value != 0:
+            rescaled_image_np = image_np / (percentile_value * scaleFactor)
+        else:
+            rescaled_image_np = image_np
+    else:
+        raise ValueError(
+            "Invalid scaling_method. Choose from 'none', 'max', 'median', or 'percentile'.")
 
-    raise ValueError(
-        "Invalid scaling_method. Choose from 'none', 'max', 'median', or 'percentile'.")
+    # Convert the rescaled NumPy array back to SimpleITK image
+    rescaled_image = sitk.GetImageFromArray(rescaled_image_np)
+    rescaled_image.CopyInformation(image)  # Preserve original image metadata
+
+    return rescaled_image
     """
     # Example usage:
     # Assuming 'corrected_image' is the output of the resizing step.
@@ -339,27 +363,39 @@ def resize_image(image, new_size=(384, 384), new_spacing=(0.5, 0.5), original_si
     Returns:
         resized_image (SimpleITK.Image): The resized image.
     """
+    # Retrieve original size and spacing if not provided
     if original_size is None:
         original_size = image.GetSize()
     if original_spacing is None:
         original_spacing = image.GetSpacing()
 
-    # Set the new size and new spacing
-    new_size = new_size + (image.GetSize()[2],)
+    # Update new size and spacing by extending them to 3D (to handle 2D+time or other cases)
+    new_size = new_size + (original_size[2],)  # Maintain the original depth
+    # Maintain original depth spacing
     new_spacing = new_spacing + (original_spacing[2],)
 
-    # Calculate the new dimensions and padding
-    resize_factors = [nsz/osz for nsz, osz in zip(new_size, original_size)]
-    new_spacing = [ospc/rf for ospc,
-                   rf in zip(original_spacing, resize_factors)]
-    new_size_rounded = [int(round(osz*rf))
-                        for osz, rf in zip(original_size, resize_factors)]
-    pad_required = [nsz-rsz for nsz, rsz in zip(new_size, new_size_rounded)]
-    padding = [int(pad // 2) for pad in pad_required]
+    # Calculate the resize factors for each dimension
+    resize_factors = [nsz / osz for nsz, osz in zip(new_size, original_size)]
 
-    # Perform the resizing and padding
-    resized_image = sitk.Resample(image, new_size_rounded, sitk.Transform(
-    ), interpolator, image.GetOrigin(), new_spacing, image.GetDirection(), 0.0, image.GetPixelIDValue())
+    # Adjust the spacing according to resize factors
+    adjusted_spacing = [osp / rf for osp,
+                        rf in zip(original_spacing, resize_factors)]
+
+    # Compute new size based on the scaling factors, rounding to avoid floating-point issues
+    new_size_rounded = [int(round(osz * rf))
+                        for osz, rf in zip(original_size, resize_factors)]
+
+    # Check if padding is needed and calculate required padding per axis
+    padding = [(nsz - rsz) // 2 for nsz,
+               rsz in zip(new_size, new_size_rounded)]
+
+    # Perform resizing using SimpleITK Resample function with the new size and spacing
+    resized_image = sitk.Resample(
+        image, new_size_rounded, sitk.Transform(), interpolator,
+        image.GetOrigin(), adjusted_spacing, image.GetDirection(), 0.0, image.GetPixelIDValue()
+    )
+
+    # Apply padding if necessary to match the target size exactly
     resized_image = sitk.ConstantPad(resized_image, padding, padding, 0.0)
 
     return resized_image
@@ -370,10 +406,12 @@ def resize_image(image, new_size=(384, 384), new_spacing=(0.5, 0.5), original_si
     # Replace this with the correct image variable name if needed.
 
     # Resize the 'rescaled_image' to 384x384 pixels with 0.5x0.5 mm spacing
-    resized_image = resize_image(rescaled_image, new_size=(384, 384), new_spacing=(0.5, 0.5))
+    resized_image = resize_image(
+        rescaled_image, new_size=(384, 384), new_spacing=(0.5, 0.5))
 
     # Now, to resize it back to its original size and spacing, assuming original_size and original_spacing are known
-    restored_image = resize_image(resized_image, new_size=original_size, new_spacing=original_spacing)
+    restored_image = resize_image(
+        resized_image, new_size=original_size, new_spacing=original_spacing)
     In this updated function, if original_size and original_spacing are provided, it will
     """
 
@@ -392,25 +430,28 @@ def write_slices_to_disk(image_sequence, output_directory):
     num_slices = image_sequence.GetSize()[2]
 
     # Create the output directory if it doesn't exist
-    if not os.path.exists(output_directory):
-        os.makedirs(output_directory)
+    os.makedirs(output_directory, exist_ok=True)
 
     for slice_index in range(num_slices):
         # Extract the 2D slice from the 3D image sequence
-        slice = image_sequence[:, :, slice_index]
+        slice_2d = image_sequence[:, :, slice_index]
 
         # Convert the slice to numpy array and rescale the pixel values to [0, 255]
-        slice_np = sitk.GetArrayViewFromImage(slice)
-        slice_np = (slice_np - np.min(slice_np)) / \
-            (np.max(slice_np) - np.min(slice_np)) * 255
-        slice_np = slice_np.astype(np.uint8)
+        slice_np = sitk.GetArrayViewFromImage(slice_2d)
+        min_val, max_val = np.min(slice_np), np.max(slice_np)
 
-        # Create a SimpleITK image from the numpy array
+        if max_val > min_val:  # Avoid division by zero in normalization
+            slice_np = ((slice_np - min_val) / (max_val - min_val)
+                        * 255).astype(np.uint8)
+        else:
+            # If all values are identical, set to zero
+            slice_np = np.zeros_like(slice_np, dtype=np.uint8)
+
+        # Convert numpy array back to SimpleITK image
         slice_rescaled = sitk.GetImageFromArray(slice_np)
 
         # Generate the file path for the slice
-        file_name = f'{slice_index:02d}.jpg'
-        file_path = os.path.join(output_directory, file_name)
+        file_path = os.path.join(output_directory, f'{slice_index:02d}.jpg')
 
         # Write the slice to disk using SimpleITK's WriteImage
         sitk.WriteImage(slice_rescaled, file_path)
@@ -419,7 +460,7 @@ def write_slices_to_disk(image_sequence, output_directory):
 def preprocess_image_for_detection(image_path, class_name=None):
     """
     Pre-process an image for input to the YOLOv8 object detection model.
-    Here it convert input image to tensor.
+    Here it converts the input image to a tensor.
 
     Parameters:
         image_path (str): The path to the input image file.
@@ -427,36 +468,36 @@ def preprocess_image_for_detection(image_path, class_name=None):
                           If None, no cropping is applied.
 
     Returns:
-        input (np.ndarray): Numpy array in a shape (3, width, height) where 3 is the number of color channels.
+        input_tensor (np.ndarray): Numpy array in a shape (3, width, height) where 3 is the number of color channels.
         image_width (int): The width of the original image.
         image_height (int): The height of the original image.
     """
+    # Open the image and get its dimensions
     image = Image.open(image_path)
     image_width, image_height = image.size
 
-    # Crop the image based on the class_name (if specified)
+    # Perform class-specific cropping if necessary
     if class_name == "fat":
         # Crop the lower 50% of the image
         image = image.crop((0, image_height // 2, image_width, image_height))
     elif class_name == "muscle":
-        # Crop middel part of image rows
-        image = image.crop((0, image_height // 4 , image_width, image_height * 3 // 4)) 
+        # Crop the middle 50% of the image
+        image = image.crop(
+            (0, image_height // 4, image_width, image_height * 3 // 4))
 
-    # Resize the image to the desired input size
-    image = image.resize((384, 384))
-    image = image.convert("RGB")
+    # Resize and convert the image to RGB in one step
+    image = image.resize((384, 384)).convert("RGB")
 
-    # Convert the image to a numpy array and normalize it
-    input = np.array(image) / 255.0
+    # Convert the image to a numpy array and normalize to range [0, 1]
+    input_array = np.array(image, dtype=np.float32) / 255.0
 
-    # Transpose the array to have the channel dimension as the first dimension
-    input = input.transpose(2, 0, 1)
+    # Transpose the array to change the shape from (384, 384, 3) to (3, 384, 384)
+    input_array = np.transpose(input_array, (2, 0, 1))
 
-    # Reshape the array to have a batch dimension of 1
-    input = input.reshape(1, 3, 384, 384)
-    input = input.astype(np.float32)
+    # Add a batch dimension (1, 3, 384, 384)
+    input_tensor = np.expand_dims(input_array, axis=0)
 
-    return input, image_width, image_height
+    return input_tensor, image_width, image_height
 
 
 def run_model(input, model_path):
@@ -465,14 +506,15 @@ def run_model(input, model_path):
     It pass the provided input tensor to YOLOv8 neural network and return result.
 
     Parameters:
-        input (np.ndarray): Numpy array in a shape (3, width, height).
+        input_tensor (np.ndarray): Numpy array in a shape (3, width, height).
         model_path (str): The path to the YOLO v8 ONNX model file.
 
     Returns:
         output (np.ndarray): Raw output of YOLOv8 network as an array.
     """
     # Load the YOLOv8 ONNX model using onnxruntime.
-    model = ort.InferenceSession(model_path)
+    model = ort.InferenceSession(model_path, providers=[
+                                 'CPUExecutionProvider'])
 
     # Run the inference by passing the input tensor to the model and storing the outputs.
     outputs = model.run(["output0"], {"images": input})
@@ -501,44 +543,49 @@ def process_model_output(output, image_width, image_height, yolo_classes=["fat",
     Returns:
         result (list): Array of detected objects in a format [[x1,y1,x2,y2,object_type,probability],..]
     """
-    # Convert the raw output to a floating-point array.
-    output = output[0].astype(float)
+    # Convert the raw output to a floating-point array and transpose it.
+    output = output[0].astype(float).T
 
-    # Transpose the output array.
-    output = output.transpose()
+    # Filter rows based on confidence threshold and get class probabilities.
+    probabilities = np.max(output[:, 4:], axis=1)
+    valid_indices = np.where(probabilities >= confidence_threshold)[0]
 
-    # Process each row in the output to extract detected objects.
-    bboxes = []
-    for row in output:
-        # Get the maximum probability and the corresponding class ID for the row.
-        probability = row[4:].max()
-        if probability < confidence_threshold:
-            continue
-        class_id = row[4:].argmax()
+    # If no valid detection, return empty result.
+    if len(valid_indices) == 0:
+        return []
 
-        # Get the label (object type) from the class ID.
-        label = yolo_classes[class_id]
+    valid_output = output[valid_indices]
+    valid_probabilities = probabilities[valid_indices]
+    class_ids = np.argmax(valid_output[:, 4:], axis=1)
 
-        #  Extract the bounding box coordinates (x1, y1, x2, y2) from the row.
-        xc, yc, w, h = row[:4]
-        x1 = (xc - w/2) / 384 * image_width
-        y1 = (yc - h/2) / 384 * image_height
-        x2 = (xc + w/2) / 384 * image_width
-        y2 = (yc + h/2) / 384 * image_height
+    # Extract bounding box coordinates (xc, yc, w, h).
+    xc, yc, w, h = valid_output[:, 0], valid_output[:,
+                                                    1], valid_output[:, 2], valid_output[:, 3]
 
-        # Append the detected object's information to the boxes list.
-        bboxes.append([x1, y1, x2, y2, label, probability])
+    # Convert bounding boxes from (xc, yc, w, h) to (x1, y1, x2, y2) and scale by image size.
+    x1 = (xc - w / 2) / 384 * image_width
+    y1 = (yc - h / 2) / 384 * image_height
+    x2 = (xc + w / 2) / 384 * image_width
+    y2 = (yc + h / 2) / 384 * image_height
 
-    # Sort the detected objects by their probabilities in descending order.
-    bboxes.sort(key=lambda x: x[5], reverse=True)
+    # Create bounding boxes array with corresponding class labels and probabilities.
+    bboxes = np.column_stack([x1, y1, x2, y2, class_ids, valid_probabilities])
 
-    # Perform non-maximum suppression to remove overlapping boxes.
+    # Sort by probabilities in descending order.
+    bboxes = bboxes[bboxes[:, 5].argsort()[::-1]]
+
+    # Perform non-maximum suppression (NMS).
     result = []
     while len(bboxes) > 0:
-        result.append(bboxes[0])
-        # Filter out boxes with a high intersection over union (IOU) with the currently selected box.
-        bboxes = [bbox for bbox in bboxes if iou(
-            bbox, bboxes[0]) < iou_threshold]
+        best_box = bboxes[0]
+        result.append([best_box[0], best_box[1], best_box[2], best_box[3],
+                       yolo_classes[int(best_box[4])], best_box[5]])
+
+        # Compute IoU for remaining boxes.
+        ious = np.array([iou(best_box, bbox) for bbox in bboxes[1:]])
+
+        # Filter boxes by IoU threshold.
+        bboxes = bboxes[1:][ious < iou_threshold]
 
     # Return the final list of detected objects.
     return result
@@ -565,7 +612,7 @@ def iou(box1, box2):
     iou_coefficient = intersection_area / union_area
 
     # Return the calculated IOU coefficient as a floating-point number.
-    return iou_coefficient
+    return iou_coefficient if union_area > 0 else 0
 
 
 def union(box1, box2):
@@ -579,13 +626,9 @@ def union(box1, box2):
     Returns:
         union_area (float): Area of the boxes union as a floating-point number.
     """
-    # Extract the coordinates (x1, y1, x2, y2) of both boxes.
-    box1_x1, box1_y1, box1_x2, box1_y2 = box1[:4]
-    box2_x1, box2_y1, box2_x2, box2_y2 = box2[:4]
-
     # Calculate the area of each box.
-    box1_area = (box1_x2 - box1_x1) * (box1_y2 - box1_y1)
-    box2_area = (box2_x2 - box2_x1) * (box2_y2 - box2_y1)
+    box1_area = (box1[2] - box1[0]) * (box1[3] - box1[1])
+    box2_area = (box2[2] - box2[0]) * (box2[3] - box2[1])
 
     # Calculate the union area by adding the areas of both boxes and subtracting the intersection area.
     union_area = box1_area + box2_area - intersection(box1, box2)
@@ -605,26 +648,19 @@ def intersection(box1, box2):
     Returns:
         intersection_area (float): Area of intersection of the boxes as a floating-point number.
     """
-    # Extract the coordinates (x1, y1, x2, y2) of both boxes.
-    box1_x1, box1_y1, box1_x2, box1_y2 = box1[:4]
-    box2_x1, box2_y1, box2_x2, box2_y2 = box2[:4]
-
     # Calculate the coordinates of the intersection area.
-    x1 = max(box1_x1, box2_x1)
-    y1 = max(box1_y1, box2_y1)
-    x2 = min(box1_x2, box2_x2)
-    y2 = min(box1_y2, box2_y2)
+    x1 = max(box1[0], box2[0])
+    y1 = max(box1[1], box2[1])
+    x2 = min(box1[2], box2[2])
+    y2 = min(box1[3], box2[3])
 
     # Calculate the width and height of the intersection area.
-    width = x2 - x1
-    height = y2 - y1
-
     # Check if there's an actual intersection by ensuring width and height are non-negative.
-    if width <= 0 or height <= 0:
-        intersection_area = 0.0
-    else:
-        # Calculate the intersection area by multiplying width and height.
-        intersection_area = width * height
+    width = max(x2 - x1, 0)
+    height = max(y2 - y1, 0)
+
+    # Calculate the intersection area by multiplying width and height.
+    intersection_area = width * height
 
     # Return the intersection area as a floating-point number.
     return intersection_area
@@ -644,11 +680,11 @@ def detect_objects_on_image(image_path, model_path):
         result (list): Array of bounding boxes in the format [[x1, y1, x2, y2, object_type, probability], ...]
     """
     # Preprocess the input image for detection to get the input tensor and image dimensions.
-    input, image_width, image_height = preprocess_image_for_detection(
+    input_tensor, image_width, image_height = preprocess_image_for_detection(
         image_path)
 
     # Run the YOLOv8 neural network on the preprocessed input to get the raw output.
-    output = run_model(input, model_path)
+    output = run_model(input_tensor, model_path)
 
     # Process the YOLOv8 model's output to get the final list of detected objects.
     result = process_model_output(output, image_width, image_height)
@@ -738,20 +774,16 @@ def detect_remove_outliers(image_3D):
     # Convert the SimpleITK image to a NumPy array.
     image_array = sitk.GetArrayFromImage(image_3D)
 
-    # Calculate the Interquartile Range (IQR) to detect outliers.
-    iqr = np.percentile(image_array, 75) - np.percentile(image_array, 25)
+    # Calculate the Interquartile Range (IQR) and the outlier threshold.
+    q75, q25 = np.percentile(image_array, [75, 25])
+    iqr = q75 - q25
+    threshold = q75 + 3 * iqr
 
-    # Create a copy of the image array to preserve the original data.
-    image_array_wo_outliers = image_array.copy()
-
-    # Set outlier values (above Q3 + 3*IQR) to NaN to remove them.
-    image_array_wo_outliers[image_array > np.percentile(
-        image_array, 75) + 3 * iqr] = np.nan
+    # Remove outliers by setting them to NaN.
+    image_array[image_array > threshold] = np.nan
 
     # Convert the processed NumPy array back to a SimpleITK image.
-    image_3D_wo_outliers = sitk.GetImageFromArray(image_array_wo_outliers)
-
-    # Copy the metadata (information) from the original image to the processed image.
+    image_3D_wo_outliers = sitk.GetImageFromArray(image_array)
     image_3D_wo_outliers.CopyInformation(image_3D)
 
     # Return the 3D image with outliers removed.
@@ -772,15 +804,12 @@ def extract_largest_connected_component(binary_image):
     labeled_image, num_labels = measure.label(
         binary_image, connectivity=2, return_num=True)
 
-    # Count the occurrences of each label in the labeled image.
-    unique_labels, label_counts = np.unique(labeled_image, return_counts=True)
+    # Find the label of the largest connected component.
+    label_counts = np.bincount(labeled_image.flat)
+    largest_label = np.argmax(label_counts[1:]) + 1
 
-    # Find the label corresponding to the largest connected component (excluding the background label).
-    largest_label = unique_labels[np.argmax(label_counts[1:]) + 1]
-
-    # Create a binary image containing only the largest connected component.
-    largest_component = labeled_image == largest_label
-
+    # Create a binary image for the largest connected component.
+    largest_component = (labeled_image == largest_label)
     # Return the binary image containing only the largest connected component.
     return largest_component
 
@@ -901,6 +930,7 @@ def suppress_warnings(func):
         your_function()
     """
 
+
 def check_predictions(predictions):
     """
     Check if any class has zero predictions.
@@ -912,25 +942,24 @@ def check_predictions(predictions):
         str: The name of the class with zero predictions, if any.
         None: If all classes have at least one prediction.
     """
-    for class_name, predictions_list in predictions.items():
-        num_predictions = len(predictions_list)
-        
-        # Check if num_predictions is 0 for any class
-        if num_predictions == 0:
-            return class_name
-    return None
+    # Use a dictionary comprehension to find classes with zero predictions
+    zero_prediction_classes = [
+        class_name for class_name, preds in predictions.items() if not preds]
+
+    # Return the first class with zero predictions if found, otherwise None
+    return zero_prediction_classes[0] if zero_prediction_classes else None
 
 
 def check_input_image(input_image):
     """
     Checks the type of the input image and raises appropriate errors if the conditions are not met.
-    
+
     Parameters:
         input_image: The input to be checked. It can be None, a SimpleITK.Image, or a string representing a file path.
-    
+
     Returns:
         str: 'SimpleITK.Image' if the input is a SimpleITK.Image, or 'Path' if the input is a valid file path.
-    
+
     Raises:
         ValueError: If the input_image is None, or if the input is neither a SimpleITK.Image nor a valid file path.
     """
@@ -941,7 +970,9 @@ def check_input_image(input_image):
     elif isinstance(input_image, str) and os.path.exists(input_image):
         return 'Path'
     else:
-        raise ValueError("The entered value is not a SimpleITK.Image or a valid path.")
+        raise ValueError(
+            "The entered value is not a SimpleITK.Image or a valid path.")
+
 
 def get_intensities_without_detection(image_3D):
     """
@@ -963,28 +994,25 @@ def get_intensities_without_detection(image_3D):
     # Determine the central slices
     central_slice_indices = [size[2] // 2 - 1, size[2] // 2, size[2] // 2 + 1]
 
-    # Initialize an empty list to store non-zero intensities
-    non_zero_intensities = []
+    # Initialize a list to accumulate non-zero intensities
+    all_non_zero_intensities = []
 
     # Loop through the central slices and extract non-zero intensities
     for index in central_slice_indices:
-        # Extract the 2D slice
+        # Extract the 2D slice and convert to numpy array
         slice_image = image_3D_wo_outliers[:, :, index]
-        # Convert to numpy array
         slice_array = sitk.GetArrayFromImage(slice_image)
-        # Get non-zero intensities
-        non_zero_values = slice_array[slice_array > 0]
-        # Append the non-zero values to the list
-        non_zero_intensities.extend(non_zero_values)
+        # Append non-zero values to the list
+        all_non_zero_intensities.extend(slice_array[slice_array > 0])
 
     # Convert the list to a numpy array
-    non_zero_intensities_array = np.array(non_zero_intensities)
+    non_zero_intensities_array = np.array(all_non_zero_intensities)
 
-    # Convert the list of intensities to a NumPy array and store in the dictionary
-    # Duplicate the array to have one array with 2 classes
-    processed_images_intensities = {}
-    processed_images_intensities['fat'] = np.array(non_zero_intensities_array)
-    processed_images_intensities['muscle'] = np.array(non_zero_intensities_array)
-    
+    # Create a dictionary with the same array for both classes
+    processed_images_intensities = {
+        'fat': non_zero_intensities_array,
+        'muscle': non_zero_intensities_array
+    }
+
     # Return the intensities arrays of the detected classes objects
     return processed_images_intensities
